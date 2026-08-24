@@ -6,9 +6,9 @@
     "C:/Autodesk/AutoCAD_2021_English_Win_64bit_dlm/YQArch/sys/yqarch.vlx": "PENDING_COMPUTE_ON_INIT"
   },
   "knowledge_snapshots": {
-    "anthropometry.json": "PENDING",
-    "drafting_standards.json": "PENDING",
-    "nbc_compliance.yaml": "PENDING",
-    "yqarch_reference.json": "PENDING"
+    "anthropometry.json": "751d5877b934c91b87c3975cd014d77cbb22abba588a32758d023f63e9c098db",
+    "drafting_standards.json": "48c5c19dfaa5d4dd39d8ad0a9d155dafa98e6480088960a1766f4577e705cae6",
+    "nbc_compliance.yaml": "40d6ddde0ff832e261849ab27fad94db9446a6ea6d8ebd3b4e223ff28becd749",
+    "yqarch_reference.json": "f3b2ff09ae54f80c0bc539de17965c9a88a1173d4f40e8cc33e76a17df7ea66e"
   }
 }

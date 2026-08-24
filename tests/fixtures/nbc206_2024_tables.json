@@ -1,0 +1,19 @@
+{
+  "version": "2024",
+  "source": "NBC 206:2024 + anthropometry.json + nbc_compliance.yaml (minimal fixture for Task 2)",
+  "stair": {
+    "res_tread_min": 250,
+    "res_riser_max": 190,
+    "other_tread_min": 279,
+    "other_riser_max": 175,
+    "max_risers_per_flight": 15,
+    "headroom_min": 2000,
+    "handrail_height": 900,
+    "formula_2R_plus_T": [600, 650]
+  },
+  "wall_thickness_nepal_loadbearing": [115, 230, 350],
+  "room": {
+    "habitable_min_m2_nepal": 4.0,
+    "habitable_min_m2_india": 9.5
+  }
+}
