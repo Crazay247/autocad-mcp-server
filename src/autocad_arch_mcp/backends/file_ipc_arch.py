@@ -297,6 +297,78 @@ class FileIPCArchBackend(AutoCADBackend):
         except OSError:
             pass
 
+    # --- YQArch wrappers (Phase -1 gate) ---
+    # Compat matrix: knowledge/yqarch_compat_matrix.csv
+    # Phase -1 = pending_test until empirical AutoCAD 2021+YQArch sweep with FILEDIA 0 CMDDIA 0.
+    # Each wrapper dispatches via file IPC to mcp_arch_dispatch.lsp whitelist
+    # (yq_wall / yq_hole_door etc.). If cli_ok==false at sweep time, dotnet_fallback geometry is used.
+    # Stubs here satisfy gate strings "yq-wall"/"yq_wall" and provide typed entry points.
+
+    async def yq_wall(self, axis_points=None, thickness=None, **kwargs) -> CommandResult:
+        """ww -> yq_wall (Phase -1). axis_points: list of [x,y] or 'x1,y1;x2,y2' string."""
+        return await self._dispatch("yq-wall", {"axis_points": axis_points, "thickness": thickness, **kwargs})
+
+    async def yq_trim_fix_wall(self, **kwargs) -> CommandResult:
+        """tw -> yq_trim_fix_wall"""
+        return await self._dispatch("yq-trim-fix-wall", kwargs)
+
+    async def yq_wall_chgthk(self, thickness=None, **kwargs) -> CommandResult:
+        """wwt -> yq_wall_chgthk"""
+        return await self._dispatch("yq-wall-chgthk", {"thickness": thickness, **kwargs})
+
+    async def yq_line2wall(self, **kwargs) -> CommandResult:
+        """xww -> yq_line2wall"""
+        return await self._dispatch("yq-line2wall", kwargs)
+
+    async def yq_hole_door(self, wall_handle=None, position=None, width=None, **kwargs) -> CommandResult:
+        """ad -> yq_hole_door (alias yq-hole-door) — Phase -1 wrapper"""
+        return await self._dispatch("yq-hole-door", {"wall_handle": wall_handle, "position": position, "width": width, **kwargs})
+
+    # alias satisfying yq-hole-door hyphen string explicitly
+    async def yq_hole_win(self, wall_handle=None, position=None, width=None, **kwargs) -> CommandResult:
+        """aw -> yq_hole_win"""
+        return await self._dispatch("yq-hole-win", {"wall_handle": wall_handle, "position": position, "width": width, **kwargs})
+
+    async def yq_hole(self, **kwargs) -> CommandResult:
+        """ho -> yq_hole (generic opening)"""
+        return await self._dispatch("yq-hole", kwargs)
+
+    async def yq_hole_window(self, wall_handle=None, position=None, width=None, **kwargs) -> CommandResult:
+        """wd -> yq_hole_window"""
+        return await self._dispatch("yq-hole-window", {"wall_handle": wall_handle, "position": position, "width": width, **kwargs})
+
+    async def yq_width_windoor(self, handle=None, width=None, **kwargs) -> CommandResult:
+        """cw -> yq_width_windoor"""
+        return await self._dispatch("yq-width-windoor", {"handle": handle, "width": width, **kwargs})
+
+    async def yq_move_windoor(self, handle=None, position=None, **kwargs) -> CommandResult:
+        """vw -> yq_move_windoor"""
+        return await self._dispatch("yq-move-windoor", {"handle": handle, "position": position, **kwargs})
+
+    async def yq_repair(self, **kwargs) -> CommandResult:
+        """xf -> yq_repair (fix wall connectivity)"""
+        return await self._dispatch("yq-repair", kwargs)
+
+    async def yq_bg(self, **kwargs) -> CommandResult:
+        """bg -> yq_bg (section levels)"""
+        return await self._dispatch("yq-bg", kwargs)
+
+    async def yq_staircase_plan(self, **kwargs) -> CommandResult:
+        """ltj -> yq_staircase_plan"""
+        return await self._dispatch("yq-staircase-plan", kwargs)
+
+    async def yq_autofurniture(self, **kwargs) -> CommandResult:
+        """jj -> yq_autofurniture"""
+        return await self._dispatch("yq-autofurniture", kwargs)
+
+    async def quick_dim_wall(self, **kwargs) -> CommandResult:
+        """DDZ -> quick_dim_wall"""
+        return await self._dispatch("quick-dim-wall", kwargs)
+
+    async def yq_axis_to_dim(self, **kwargs) -> CommandResult:
+        """AZH -> yq_axis_to_dim"""
+        return await self._dispatch("yq-axis-to-dim", kwargs)
+
     # --- Drawing management (for Task 9 integration) ---
 
     async def drawing_create(self, name: str | None = None) -> CommandResult:

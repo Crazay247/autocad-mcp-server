@@ -1,0 +1,19 @@
+# YQArch compat matrix — Phase -1 gate | FILEDIA 0 + CMDDIA 0 sweep required | pending_test until empirical AutoCAD 2021+YQArch verification | fallback=dotnet_fallback | UTF-8 | version 1.0.0
+# Notes: command=alias as invoked, lisp_fn=underlying YQArch VLX/LSP function, cli_ok=pending_test until CLI test, dialog=unknown until test, fallback=dotnet_fallback geometry path. See knowledge/yqarch_reference.json for source.
+command,alias,lisp_fn,cli_ok,dialog,fallback,notes
+ww,ww,yq_wall,pending_test,unknown,dotnet_fallback,Phase -1 sweep with FILEDIA 0 CMDDIA 0 required
+tw,tw,yq_trim_fix_wall,pending_test,unknown,dotnet_fallback,
+wwt,wwt,yq_wall_chgthk,pending_test,unknown,dotnet_fallback,
+xww,xww,yq_line2wall,pending_test,unknown,dotnet_fallback,
+ad,ad,yq_hole_door,pending_test,unknown,dotnet_fallback,
+aw,aw,yq_hole_win,pending_test,unknown,dotnet_fallback,
+ho,ho,yq_hole,pending_test,unknown,dotnet_fallback,
+wd,wd,yq_hole_window,pending_test,unknown,dotnet_fallback,
+cw,cw,yq_width_windoor,pending_test,unknown,dotnet_fallback,
+vw,vw,yq_move_windoor,pending_test,unknown,dotnet_fallback,
+xf,xf,yq_repair,pending_test,unknown,dotnet_fallback,
+bg,bg,yq_bg,pending_test,unknown,dotnet_fallback,section levels
+ltj,ltj,yq_staircase_plan,pending_test,unknown,dotnet_fallback,
+jj,jj,yq_autofurniture,pending_test,unknown,dotnet_fallback,
+DDZ,DDZ,quick_dim_wall,pending_test,unknown,dotnet_fallback,
+AZH,AZH,yq_axis_to_dim,pending_test,unknown,dotnet_fallback,
