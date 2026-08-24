@@ -1,0 +1,191 @@
+{
+  "version": "1.0.0",
+  "source_date": "2026-08-24",
+  "unit": "mm",
+  "jurisdiction_note": "South Asian / Nepal reference; Neufert 4th ed + Chakrabarti 1997; verify via knowledge/references/_collection_log.md",
+  "human_body": {
+    "standing_male_5th_95th": {
+      "stature": [1620, 1800],
+      "eye_level": [1500, 1650],
+      "shoulder_height": [1300, 1450],
+      "elbow_height": [1000, 1100],
+      "knuckle_height": [700, 750],
+      "shoulder_breadth": [450, 520]
+    },
+    "standing_female_5th_95th": {
+      "stature": [1500, 1620],
+      "eye_level": [1400, 1500],
+      "shoulder_height": [1200, 1350],
+      "elbow_height": [950, 1050],
+      "knuckle_height": [650, 700],
+      "shoulder_breadth": [400, 470]
+    },
+    "seated_mm": {
+      "sitting_height_seat_to_crown": [850, 950],
+      "eye_level_seated_AFF": [1100, 1200],
+      "shoulder_height_above_seat": [550, 650],
+      "elbow_height_above_seat": [200, 300],
+      "knee_height": [500, 600],
+      "popliteal_height": [400, 450]
+    },
+    "reach_zones_AFF": {
+      "primary_comfortable": [750, 1600],
+      "primary_practical_min": [700, 1700],
+      "primary_critical_min": 600,
+      "overhead_max": [1700, 2100],
+      "side_max": [1000, 1200],
+      "forward_seated_from_edge": [400, 500],
+      "accessible_wheelchair": [300, 1200],
+      "circulation_envelope_width": 600,
+      "circulation_envelope_min": 450
+    },
+    "wheelchair": {
+      "width_back": 630,
+      "length": 1075,
+      "turning_diameter": 1500,
+      "high_reach_M": 1715,
+      "high_reach_F": 1575,
+      "forward_reach_over_table_M": 580,
+      "forward_reach_over_table_F": 510
+    }
+  },
+  "building_category_minima": {
+    "residential": {
+      "habitable_room_area_m2": {
+        "NBC206_2024_nepal": 4.0,
+        "NBC206_2024_note": "2000x2000 courtyard 3000x3000 older",
+        "SP7_2016_india": 9.5,
+        "SP7_2016_width_min": 2400,
+        "comfortable": 12.0
+      },
+      "second_habitable_m2": 7.5,
+      "room_height_mm": { "NBC206_2024": 2400, "SP7_2016_india": 2750, "comfortable": 3000 },
+      "kitchen_area_m2": 5.0,
+      "kitchen_width_min": 1800,
+      "kitchen_dining_combined_m2": 7.5,
+      "kitchen_dining_width_min": 2100,
+      "bathroom_area_m2": 1.8, "bathroom_width_min": 1200, "bathroom_height": 2100,
+      "wc_separate_m2": 1.1, "wc_width_min": 900,
+      "combined_bath_wc_m2": 2.8, "combined_width_min": 1200,
+      "store_m2": 3.0, "store_width_min": 2200,
+      "plinth_mm": 450,
+      "mezzanine_height_min": 2200,
+      "basement_height_min": 2400,
+      "parapet_mm": [1000, 1200],
+      "stilt_floor_mm": 2500
+    },
+    "educational": {
+      "room_height_nepal_hills": 2750, "room_height_terai": 3200, "room_height_default": 2750,
+      "occupant_load_gross_m2": 4.0, "area_per_student_m2": [1.0, 1.2],
+      "stair_width": 1500,
+      "accessibility": "Category 2"
+    },
+    "healthcare": {
+      "room_height_hills": 3200, "room_height_terai": 3600,
+      "occupant_load_m2": 14,
+      "operation_door_mm": "1500 two-leaf self-closing",
+      "patient_lift_car_mm": [1200, 2400],
+      "ventilation_ratio": "1/6 room area",
+      "accessibility_lt25": "Category 2", "gt25": "Category 3"
+    },
+    "commercial_office": {
+      "room_height": 2900,
+      "commercial_main_m2": 2.75, "commercial_other_m2": 5.5,
+      "office_m2": 9.0
+    },
+    "assembly": {
+      "occupant_load_net_m2": 1.4,
+      "min_doors_if_gt50": 2,
+      "door_shutter_max": 1200,
+      "exit_door_keyless_inside": true,
+      "stair_width_le150": 1500, "stair_width_gt150": 2000
+    }
+  },
+  "circulation": {
+    "passage": { "one_person_min": 600, "comfortable": [800, 900], "two_persons": [1200, 1500], "accessible_route_min": 1200 },
+    "corridor_min_nepal_Table3": "per Table 3",
+    "corridor_min_india": 2000,
+    "max_travel_to_exit": 30000,
+    "max_travel_external_corridor": 40000
+  },
+  "doors_mm": {
+    "exit_general": [1000, 2100],
+    "exit_residential": [900, 2000],
+    "exit_india_general": [1000, 2100],
+    "toilet_verandah": 750,
+    "bathroom_min": 700,
+    "bedroom_internal": 900,
+    "main_entrance": [1000, 1200],
+    "accessible_clear": 900,
+    "accessible_clear_min": 810,
+    "assembly_shutter_max": 1200,
+    "habitable_height": [2000, 2100]
+  },
+  "stairs_mm": {
+    "NBC206_2024_Table4": {
+      "residential": { "tread_min_A": 250, "riser_max_B": 190, "max_risers_per_flight": 15, "headroom_min": 2000, "handrail_height": 900 },
+      "other": { "tread_min_A": 279, "riser_max_B": 175, "max_risers_per_flight": 15, "headroom_min": 2000, "handrail_height": 900 }
+    },
+    "SP7_2016_width_by_occupancy": {
+      "row_housing_2storey": 1000,
+      "residential_A1_A3_A4": 1250,
+      "hotel_A5_A6": 1500,
+      "assembly_le150": 1500,
+      "assembly_gt150": 2000,
+      "educational": 1500
+    },
+    "formula_2R_plus_T": [600, 650],
+    "formula_note": "630 comfortable (Neufert)"
+  },
+  "windows_light_vent": {
+    "NBC206_2024_S3_3": {
+      "habitable_hills": "1/10 floor area",
+      "habitable_other": "1/8",
+      "kitchen_hills": "1/8",
+      "kitchen_other": "1/6",
+      "ventilation_general": "1/16",
+      "ventilation_hospitals_schools": "1/8"
+    }
+  },
+  "furniture_mm": {
+    "dining_table_height": [720, 750],
+    "work_desk_height": [720, 760],
+    "kitchen_counter_height": [850, 900],
+    "kitchen_counter_height_range": [850, 950],
+    "kitchen_counter_depth": 600,
+    "kitchen_counter_accessible_max": 800,
+    "knee_clearance_min": 680,
+    "chair_seat_height": [420, 450],
+    "chair_seat_india": [440, 470],
+    "sofa_seat_height": [400, 450],
+    "bed_top_mattress": [450, 550],
+    "single_bed": [900, 2000],
+    "double_bed": [1600, 2000],
+    "bedside_clearance_min": 600,
+    "washbasin_height": [800, 850],
+    "mirror_lower_edge": [900, 1000],
+    "wc_frontal_clearance": [750, 900],
+    "kitchen_aisle_one_cook": [1050, 1200],
+    "wardrobe_depth": 600,
+    "reach_prime_storage_AFF": [750, 1600]
+  },
+  "recommended_plugin_defaults_mm": {
+    "habitable_room_min_area": { "nepal": 4000, "india": 9500, "comfortable_m2": 12 },
+    "room_height": { "nepal": 2400, "india": 2750, "comfortable": 3000 },
+    "door_exit_general": "1000x2100",
+    "door_residential_exit": "900x2100",
+    "door_toilet": "750",
+    "stair_tread_residential": 250,
+    "stair_riser_residential": 190,
+    "stair_tread_other": 279,
+    "stair_riser_other": 175,
+    "stair_width_residential": 1200,
+    "corridor_min": 1200,
+    "kitchen_counter_height": 850,
+    "counter_depth": 600,
+    "chair_height": 420,
+    "table_height": 750,
+    "reach_prime": "750-1600",
+    "wheelchair_turning": 1500
+  }
+}

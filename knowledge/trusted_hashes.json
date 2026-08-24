@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "note": "Pin SHA-256 of YQArch binaries + knowledge JSON snapshots; update intentionally, verify at startup",
+  "yqarch_vlx": {
+    "D:/SOFTWARES/YQArch/sys/yqarch.vlx": "PENDING_COMPUTE_ON_INIT",
+    "C:/Autodesk/AutoCAD_2021_English_Win_64bit_dlm/YQArch/sys/yqarch.vlx": "PENDING_COMPUTE_ON_INIT"
+  },
+  "knowledge_snapshots": {
+    "anthropometry.json": "PENDING",
+    "drafting_standards.json": "PENDING",
+    "nbc_compliance.yaml": "PENDING",
+    "yqarch_reference.json": "PENDING"
+  }
+}

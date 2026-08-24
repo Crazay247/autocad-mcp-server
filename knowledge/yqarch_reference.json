@@ -1,0 +1,59 @@
+{
+  "version": "1.0.0",
+  "install": {
+    "path_primary": "D:/SOFTWARES/YQArch",
+    "path_dlm": "C:/Autodesk/AutoCAD_2021_English_Win_64bit_dlm/YQArch",
+    "sys": "sys",
+    "vlx": "sys/yqarch.vlx",
+    "cuix": "sys/yqarch.cuix",
+    "mnl": "sys/yqarch.mnl",
+    "start": "sys/yqstart.lsp",
+    "panel": "sys/yqpanel.lsp",
+    "support_path_injected": "HKCU:\\SOFTWARE\\Autodesk\\AutoCAD\\R24.0\\ACAD-4101:409\\Profiles\\<<Unnamed Profile>>\\General\\ACAD includes YQArch sys",
+    "load_gate": "(if (null c:yq_about) (load \"yqarch.vlx\"))"
+  },
+  "layers_reference": {
+    "DOTE": { "colour": 1, "linetype": "CENTER", "use": "axis/grid" },
+    "VIEWPORT": { "colour": 181, "use": "paper viewport no-plot" },
+    "WALL": { "colour": 80, "use": "walls multi-colour by thickness" },
+    "WALL_FILL": { "colour": 8, "use": "wall hatch" },
+    "COLUMN": { "colour": 40 },
+    "COL_FILL": { "colour": 8 },
+    "DOOR": { "colour": 2 },
+    "WINDOW": { "colour": 2 },
+    "WINDOW_TEXT": { "colour": 7 },
+    "STAIR": { "colour": 2 },
+    "FURNITURE": { "colour": 53 },
+    "FURHATCH": { "colour": 57 },
+    "WD_wood": { "colour": 52 },
+    "AL_metal": { "colour": 4 },
+    "GL_glass": { "colour": 171 },
+    "SILL": { "colour": 8 }
+  },
+  "wall_thickness_mm": [50,60,90,100,120,140,150,180,200,240,250,300,360,480],
+  "wall_thickness_default": 120,
+  "column_widths_mm": [0,50,60,100,120,200,240,300,400,500,600,700,800,900,1000],
+  "door_opening_widths_mm": [600,700,750,800,850,900,1000,1100,1200,1500,1600,1800,2000,2100,2400,3000,3200,3600,5400],
+  "scales": [1,2,3,4,5,6,8,10,15,20,25,30,40,50,60,75,80,100,120,150,200,250,300,400,500,600,1000,2000,5000,10000],
+  "commands": {
+    "axis": { "ax": "yq_axisline", "zxw": "yq_gridaxis" },
+    "wall": { "ww": "yq_wall", "tw": "yq_trim_fix_wall", "wwt": "yq_wall_chgthk", "xww": "yq_line2wall", "wwo": "yq_wall_cdoffset", "wwa": "yq_wall2axis", "wwf": "yq_fill_wall" },
+    "column": { "zzr": "yq_r_column", "zzc": "yq_o_column", "zzl": "yq_l_column", "zzt": "yq_t_column", "zzx": "yq_c_column", "zzbz": "yq_axis_column", "xxzz": "yq_pline2column", "zzf": "yq_fill_column" },
+    "window_door": { "ad": "yq_hole_door", "ad2": "yq_door", "aw": "yq_hole_win", "aw2": "yq_win", "td": "yq_windoor_replace", "ho": "yq_hole", "adt": "yq_hole_pocketdoor", "wd": "yq_hole_window", "wdz": "yq_hole_cornerwindow", "mkx": "yq_doorsill", "cw": "yq_width_windoor", "vw": "yq_move_windoor", "xf": "yq_repair", "vx": "yq_moveandfix", "cx": "yq_copyandfix", "wbh": "yq_winSerialNumber" },
+    "stair": { "ltj": "yq_staircase_plan", "lta": "yq_arcstair_plan", "dtj": "yq_lift_plan", "ltf": "yq_escalator", "ltp": "yq_staircase_section", "lxtb": "yq_step_section" },
+    "dimension": { "DDZ": "quick_dim_wall", "DDZZ": "quick_dim", "DDSS": "dim_continue", "AZH": "yq_axis_to_dim", "BG": "yq_bg_section_levels" },
+    "decoration": { "jj": "yq_autofurniture", "wc": "yq_ArrangeWC", "yg": "yq_chestplan", "gz": "yq_cupboardplan" },
+    "system": { "sd": "yq_setdwgscale", "tk": "yq_dwgframe", "yqver": "yq_ver" }
+  },
+  "blocks_lib": {
+    "windows": "sys/windows/WD_*.dwg",
+    "doors": "sys/blocks/??/*",
+    "furniture": "sys/library/yqfurnis.dwg",
+    "north": "sys/blocks/???/NORTH*.dwg",
+    "hatches": ["sys/library/ENGINE.pat","sys/library/???.pat"],
+    "ctb": "sys/library/yqarch.ctb",
+    "lin": "sys/library/yqarch.lin"
+  },
+  "compat_matrix_path": "knowledge/yqarch_compat_matrix.csv",
+  "compat_matrix_note": "Phase -1 gate: test each command with FILEDIA 0 CMDDIA 0 for dialog vs CLI"
+}

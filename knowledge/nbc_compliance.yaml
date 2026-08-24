@@ -1,0 +1,85 @@
+version: 1.0.0
+unit: mm
+jurisdiction_toggle:
+  nepal: NBC206_2024
+  india: SP7_2016_Pt3
+  comfortable: Neufert
+NBC206_2024_content_triggers:
+  - purpose_group_subgroup
+  - exit_doors_min_width_height
+  - staircase: {tread_min: 250, riser_max: 190, max_risers_per_flight: 15, headroom_min: 2000, handrail: 900, other_tread: 279, other_riser: 175}
+  - travel_max: 30000
+  - travel_external_corridor: 40000
+  - plinth_avg: 450
+  - room_height: {residential: 2400, educational_hills: 2750, healthcare_hills: 3200, terai_higher: true}
+  - light_ventilation:
+      habitable_hills: "1/10"
+      habitable_other: "1/8"
+      kitchen_hills: "1/8"
+      kitchen_other: "1/6"
+      ventilation_general: "1/16"
+      hospitals_schools: "1/8"
+  - parking: {per_car_LxB: "per plan", ramp_gradient: "per NBC"}
+  - parapet_handrail: [1000, 1200]
+  - disabled_access: {Cat1: "fully", Cat2: "partial <25 beds", Cat3: "fully >25 beds", ramp_gradient: "1:12", width_min: 1200}
+validation_rules:
+  - id: wall_thickness_nepal_loadbearing
+    param: thickness
+    allowed: [115, 230, 350]
+    cite: NBC206 Table 4
+  - id: door_exit_general
+    param: width
+    min: 1000
+    height: 2100
+  - id: door_residential_exit
+    min: 900
+    height: 2000
+  - id: toilet_door
+    min: 750
+  - id: stair_2R_plus_T
+    formula: 2*R + T
+    range: [600, 650]
+    comfortable: 630
+  - id: corridor_min
+    min: 2000
+    note: India 2000, Nepal Table3
+  - id: light_vent_habitable
+    ratio_hills: "1/10"
+    ratio_other: "1/8"
+  - id: parapet
+    min: 1000
+    max: 1200
+layers_to_create:
+  - A-WALL
+  - A-WALL-230
+  - A-WALL-115
+  - A-COL
+  - A-BEAM
+  - A-DOOR
+  - A-WIN
+  - A-DIM
+  - A-HATCH
+  - A-GRID
+  - A-ANNO
+  - A-TITLE
+  - A-SECT
+  - A-SLAB
+  - DEFPOINTS
+dimstyles_to_create:
+  - name: NBC-100
+    scale: 100
+    text_height: 2.5
+    arrow: ArchTick
+    units: mm
+    precision: 0
+  - name: NBC-50
+    scale: 50
+    text_height: 2.5
+    arrow: ArchTick
+textstyles:
+  - ARCH-TITLE
+  - ARCH-NOTE
+sheets:
+  - A1
+  - A3
+  - 20x30

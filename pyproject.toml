@@ -1,0 +1,41 @@
+[project]
+name = "autocad-arch-mcp"
+version = "0.1.0"
+description = "Architectural MCP for AutoCAD 2021 + YQArch (NBC Standard) — hybrid dotnet+file_ipc+com+ezdxf"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp[cli]>=1.2.1,<2.0",
+    "ezdxf>=0.18,<1.0",
+    "matplotlib>=3.7",
+    "Pillow>=10.0.0,<12.0",
+    "structlog>=24.0.0",
+    "pywin32>=305; sys_platform == 'win32'",
+    "pydantic>=2.0",
+    "jsonschema>=4.0",
+    "pyyaml>=6.0",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "hypothesis>=6.0",
+    "pypdf>=4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/autocad_arch_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "win32: Windows-only",
+    "autocad: requires AutoCAD 2021 + YQArch",
+    "e2e: end-to-end live AutoCAD",
+]

@@ -1,0 +1,116 @@
+{
+  "version": "1.0.0",
+  "unit": "mm",
+  "sheet_sizes": [
+    { "designation": "A0", "trimmed": [841, 1189], "use": "master plans", "first_choice": true },
+    { "designation": "A1", "trimmed": [594, 841], "use": "floor plans 1:50/1:100", "first_choice": true },
+    { "designation": "A2", "trimmed": [420, 594], "use": "plans 1:100", "first_choice": true },
+    { "designation": "A3", "trimmed": [297, 420], "use": "details", "first_choice": true },
+    { "designation": "A4", "trimmed": [210, 297], "use": "schedules", "first_choice": true },
+    { "designation": "20x30", "trimmed": [508, 762], "use": "DUDBC e-BPS submission Nepal", "first_choice": true, "notes": "non-ISO mandatory for permit" }
+  ],
+  "borders": { "left_mm": 20, "other_mm": 10, "frame_line_mm": 0.7, "centring_mm": 0.35, "grid_field_mm": 50 },
+  "title_block_loc": "bottom-right A0-A3, lower A4, reading = title direction",
+  "scales_recommended": ["1:1","1:2","1:5","1:10","1:20","1:50","1:100","1:200","1:500","1:1000","1:2000","1:5000","1:10000"],
+  "scales_house": { "plans": "1:100", "plans_details": "1:50", "sections_details": "1:20", "designation": "SCALE 1:X" },
+  "line_weights": {
+    "ratio": "1:2:4 narrow:wide:extra",
+    "groups": [
+      { "group": "0.25", "narrow": 0.13, "wide": 0.25, "extra": 0.5, "symbol": 0.18 },
+      { "group": "0.35", "narrow": 0.18, "wide": 0.35, "extra": 0.7, "symbol": 0.25 },
+      { "group": "0.5", "narrow": 0.25, "wide": 0.5, "extra": 1.0, "symbol": 0.35, "default_A1_A2": true },
+      { "group": "0.7", "narrow": 0.35, "wide": 0.7, "extra": 1.4, "symbol": 0.5 },
+      { "group": "1.0", "narrow": 0.5, "wide": 1.0, "extra": 2.0, "symbol": 0.7 }
+    ],
+    "mapping_1_100": {
+      "wall_outline_cut": { "type": "Continuous wide", "weight": 0.5 },
+      "door_window_jambs": { "type": "Continuous wide", "weight": 0.5 },
+      "hidden_edges": { "type": "Dashed narrow", "weight": 0.25 },
+      "axis": { "type": "CENTER long-dash dot", "weight": 0.25 },
+      "dimension_extension": { "type": "Continuous thin", "weight": 0.18 },
+      "leader": { "type": "Continuous thin", "weight": 0.18 },
+      "section_cut": { "type": "Extra-wide dash-dot", "weight": 0.7 },
+      "hatching": { "type": "Continuous thin", "weight": 0.13 }
+    }
+  },
+  "dimensioning": {
+    "extension": { "type": "thin continuous perp", "DIMEXO_offset_origin": "gap ~1.6mm", "DIMEXE_extend_beyond": "3mm" },
+    "line": "unbroken, never axis/outline",
+    "termination_chain_parallel": { "style": "oblique 45° tick ArchTick", "DIMBLK": "ArchTick", "DIMDLE": "extend beyond tick" },
+    "termination_running": "open 90° arrowheads datum dot in circle",
+    "text": { "place": "above clear mid", "DIMTAD": 1, "readable": "bottom or right", "DIMTIH": 0, "DIMTOH": 0, "min_height": 2.5, "units": "mm DIMLUNIT 2 decimal" },
+    "wall_bearing": "to rough unfinished faces", "framed": "to column centres"
+  },
+  "hatches_IS962_Table7": [
+    { "material": "Brick", "pattern": "AR-BRSTD/BRICK", "colour": "Vermilion" },
+    { "material": "Concrete mass", "pattern": "AR-CONC coarser" },
+    { "material": "RCC", "pattern": "AR-CONC finer" },
+    { "material": "Steel", "pattern": "ANSI31/ANSI32" },
+    { "material": "Wood", "pattern": "WOOD/AR-WOOD", "colour": "Burnt sienna" },
+    { "material": "Glass", "pattern": "GLASS" },
+    { "material": "Plaster", "pattern": "AR-SAND" },
+    { "material": "Hardcore gravel", "pattern": "GRAVEL", "colour": "Yellow ochre" },
+    { "material": "Earth soil", "pattern": "EARTH" },
+    { "material": "Insulation", "pattern": "INSUL" },
+    { "material": "Stone", "pattern": "AR-RROOF/STONE", "colour": "Cobalt/Payne grey" }
+  ],
+  "layers_AIA_NCS": {
+    "format": "Discipline(2)-Major(4)-Minor(4)-Minor(4)-Status(1)",
+    "discipline": ["G","H","V","B","W","C","L","S","A","I","Q","F","P","D","M","E","T","R","X","Z","O"],
+    "status": ["A","D","E","F","M","N","T","X","1-9"],
+    "plugin_set": [
+      { "name": "A-WALL", "colour": 7, "linetype": "Continuous" },
+      { "name": "A-WALL-FULL", "colour": 7 },
+      { "name": "A-DOOR", "colour": 3 },
+      { "name": "A-WIND", "colour": 3 },
+      { "name": "A-FLOR", "colour": 8 },
+      { "name": "A-FLOR-HATCH", "colour": 8 },
+      { "name": "A-WALL-PATT", "colour": 9 },
+      { "name": "A-ANNO-DIMS", "colour": 3 },
+      { "name": "A-ANNO-TEXT", "colour": 7 },
+      { "name": "A-GRID", "colour": 1, "linetype": "CENTER" },
+      { "name": "A-GLAZ", "colour": 5 },
+      { "name": "A-STRS", "colour": 2 },
+      { "name": "A-SECT", "colour": 7 },
+      { "name": "A-SECT-HATCH", "colour": 8 },
+      { "name": "A-NORTH", "colour": 7 },
+      { "name": "G-TTLB", "colour": 7 },
+      { "name": "V-PORT", "colour": 9, "plot": false }
+    ]
+  },
+  "title_block_ISO7200": {
+    "mandatory": ["legal_owner","identification_number","date_of_issue","sheet_number","title","approval_person","creator","document_type"],
+    "optional": ["revision_index","num_sheets","supplementary_title","responsible_depart","classification","status","paper_size"],
+    "nepal_extra": ["scale","units ALL DIMS IN mm","projection 3rd angle","NEC licence","north","DO NOT SCALE"],
+    "max_width": 170,
+    "revision_panel": "contiguous bottom-up"
+  },
+  "symbols": {
+    "north": "plan north + true north where differ, paper space upper-left|upper-right, consistent",
+    "plan_orientation": "building parallel sheet, all plans identically oriented",
+    "section_marker": "lettered A,B,C arrow view direction both ends",
+    "elevation_marker": "lettered arrow face direction",
+    "door_swing": "arc leaf direction",
+    "window": "3-line jamb+sill+head per scale",
+    "stair_arrow": "UP/DN + flight count",
+    "level_marker": "filled triangle + value ±0.000/+3.000 FFL datum",
+    "grid_bubble": "circle letter A.. / numeral 1.. ends, Ø10-12, spacing 3/4.5/6m modular"
+  },
+  "grid": { "linetype": "CENTER narrow 0.25", "naming": "letters omit I,O + numerals", "bubble_dia": [10,12] },
+  "section_conventions": {
+    "cut_line": "extra-wide dash-dot across plan, arrows view direction",
+    "label": "A-A or 1-1 under view",
+    "hatch": "cut surfaces only per material table",
+    "elevation": "no hatch unless material",
+    "level_labels": "GROUND/FIRST FLOOR"
+  },
+  "paper_space": {
+    "model": "1:1 mm",
+    "layout": "one per sheet, plot size = sheet size",
+    "viewport_layer": "V-PORT no-plot locked after scale",
+    "viewport_scales": ["1:100","1:50","1:20"],
+    "annotative": "preferred one style else DIMSCALE=plot×",
+    "plot_style": "CTB by colour",
+    "nbc_drawing": "title block paper space G-TTLB, north paper space"
+  }
+}
