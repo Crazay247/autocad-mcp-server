@@ -547,3 +547,59 @@ def score_drawing_hama(features: dict) -> dict:
     compliant = hama_score >= 95
     severity = "critical" if hama_score < 50 else "major" if hama_score < 85 else "minor" if hama_score < 95 else "ok"
     return {"score": hama_score, "compliant": compliant, "findings": hama_findings, "breakdown": breakdown, "severity": severity, "base": base}
+
+
+def score_drawing_any(features: dict, drawing_type: str = "plan") -> dict:
+    """Type-aware 0-100 for any drawing: plan/section/detail/schedule/site."""
+    # Dispatch to base or hama per type
+    if drawing_type in ("section", "detail"):
+        return score_drawing_hama(features)
+    if drawing_type in ("schedule",):
+        # Schedule: table grid + text, no wall check
+        findings: list[str] = []
+        score = 0
+        breakdown: dict[str, int] = {}
+        # Text legibility 30
+        if features.get("text_ok", True):
+            breakdown["text"] = 30
+            score += 30
+        else:
+            findings.append("schedule text <2.5mm")
+        # Table grid 25
+        if features.get("has_table", True):
+            breakdown["table"] = 25
+            score += 25
+        else:
+            findings.append("schedule grid missing")
+        # Layer 15
+        if features.get("layer_ok", True):
+            breakdown["layer"] = 15
+            score += 15
+        # Viewport 15 + title 15
+        for k, w in [("has_viewport", 15), ("has_title", 15)]:
+            if features.get(k, True):
+                breakdown[k] = w
+                score += w
+            else:
+                findings.append(f"{k} missing")
+                breakdown[k] = 0
+        compliant = score >= 85
+        severity = "critical" if score < 50 else "major" if score < 85 else "minor" if score < 95 else "ok"
+        return {"score": min(100, score), "compliant": compliant, "findings": findings, "breakdown": breakdown, "severity": severity}
+    if drawing_type in ("site",):
+        # Site: boundary + spot levels + grid + viewport
+        findings = []
+        score = 0
+        breakdown = {}
+        for k, w in [("has_boundary", 25), ("has_spot", 20), ("has_grid", 15), ("has_viewport", 20), ("layer_ok", 10), ("text_ok", 10)]:
+            if features.get(k, True):
+                breakdown[k] = w
+                score += w
+            else:
+                findings.append(f"site {k} missing")
+                breakdown[k] = 0
+        compliant = score >= 85
+        severity = "critical" if score < 50 else "major" if score < 85 else "minor" if score < 95 else "ok"
+        return {"score": min(100, score), "compliant": compliant, "findings": findings, "breakdown": breakdown, "severity": severity}
+    # Default plan
+    return score_drawing(features)

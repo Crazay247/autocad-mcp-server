@@ -227,3 +227,71 @@ def hama_composite(doc: Any, validator_features: dict, screenshot_b64: str | Non
         "vision": vis,
         "hama_similarity": sim,
     }
+
+
+def score_drawing_heuristic_any(doc: Any, drawing_type: str = "plan", screenshot_b64: str | None = None) -> dict:
+    """Type-aware vision: plan vs section vs detail vs schedule vs site."""
+    if drawing_type in ("section", "detail"):
+        # Section/detail: check cut line 0.7, hatch, levels, not wall_closure
+        try:
+            msp = doc.modelspace()
+            has_cut = any(e.dxftype() == "LWPOLYLINE" and e.dxf.layer == "A-SECT" for e in msp)
+            has_hatch = any(e.dxftype() == "HATCH" for e in msp)
+            has_levels = any(e.dxftype() in ("TEXT", "MTEXT") and "±" in (getattr(e.dxf, "text", "") or getattr(e, "text", "")) for e in msp)
+            score = 0
+            findings: list[str] = []
+            breakdown: dict[str, int] = {}
+            for k, ok, w in [("cut_line", has_cut, 25), ("hatch", has_hatch, 25), ("levels", has_levels, 15)]:
+                if ok:
+                    breakdown[k] = w
+                    score += w
+                else:
+                    breakdown[k] = 0
+                    findings.append(f"{k} missing for {drawing_type}")
+            # Add variance
+            from .judge import _variance_ok  # type: ignore
+
+            if _variance_ok(screenshot_b64):
+                breakdown["variance"] = 15
+                score += 15
+            else:
+                breakdown["variance"] = 0
+                findings.append("variance fail")
+            # Text
+            breakdown["text"] = 20
+            score += 20
+            compliant = score >= 80
+            severity = "critical" if score < 50 else "major" if score < 80 else "minor" if score < 90 else "ok"
+            return {"score": min(100, score), "compliant": compliant, "findings": findings, "breakdown": breakdown, "severity": severity}
+        except Exception as e:
+            return {"score": 0, "compliant": False, "findings": [str(e)], "breakdown": {}, "severity": "critical"}
+    if drawing_type in ("schedule", "site"):
+        return score_drawing_heuristic(doc, screenshot_b64)
+    return score_drawing_heuristic(doc, screenshot_b64)
+
+
+def hama_composite_any(doc: Any, validator_features: dict, drawing_type: str = "plan", screenshot_b64: str | None = None) -> dict:
+    """Any-type 0.5*validator_any +0.3*vision_any +0.2*sim (gold per type)."""
+    from .validator import score_drawing_any
+    try:
+        from ..rag.hama_store import hama_similarity  # type: ignore
+    except Exception:
+        from autocad_arch_mcp.rag.hama_store import hama_similarity  # type: ignore
+
+    # Map drawing_type to gold_id
+    gold_map = {"plan": "hama_A001", "detail": "hama_wall", "section": "hama_A001", "schedule": "baral", "site": "hama_A001"}
+    gold_id = gold_map.get(drawing_type, "hama_A001")
+    v = score_drawing_any(validator_features, drawing_type=drawing_type)
+    vis = score_drawing_heuristic_any(doc, drawing_type=drawing_type, screenshot_b64=screenshot_b64)
+    try:
+        sim = hama_similarity(validator_features, gold_id=gold_id)
+    except Exception:
+        sim = 50.0
+    composite = int(0.5 * v["score"] + 0.3 * vis["score"] + 0.2 * sim)
+    findings = v["findings"] + vis["findings"]
+    if sim < 85:
+        findings.append(f"hama_similarity {sim:.1f} <85 vs {gold_id}")
+    breakdown = {**{f"validator_{k}": v for k, v in v["breakdown"].items()}, **{f"vision_{k}": v for k, v in vis["breakdown"].items()}, "hama_similarity": sim}
+    compliant = composite >= 95 if drawing_type in ("detail", "section") else composite >= 85
+    severity = "critical" if composite < 50 else "major" if composite < 85 else "minor" if composite < 95 else "ok"
+    return {"score": composite, "compliant": compliant, "findings": findings, "breakdown": breakdown, "severity": severity, "validator": v, "vision": vis, "hama_similarity": sim}

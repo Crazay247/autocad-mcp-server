@@ -29,6 +29,12 @@ except Exception:
     hama_similarity = None  # type: ignore
     get_gold = None  # type: ignore
 
+# Any-drawing generators for Hama 10 families
+try:
+    from .generators import generate_any  # type: ignore
+except Exception:
+    generate_any = None  # type: ignore
+
 mcp = FastMCP("autocad-arch-mcp")
 
 # ── Pydantic models (strong, cited, extra ignored for compat) ────────────
@@ -1257,6 +1263,53 @@ async def hama_gold(operation: str, data: dict | None = None, include_screenshot
                 return _error(str(e))
         else:
             return _json({"ok": False, "error": f"unknown hama_gold operation {operation}"})
+    except Exception as e:
+        return _error(str(e))
+
+
+@mcp.tool(annotations={"title": "NBC Generate Any"})
+async def nbc_generate(operation: str, data: dict | None = None, include_screenshot: bool = False) -> str:
+    """Generate any Hama-level drawing: plan 1:100, section 1:20, detail 1:5, schedule, site 1:200.
+
+    operation: drawing_type e.g., plan, section, detail, schedule, site, elevation, wall_detail
+    data: {scale: "1:100"/"1:5"/"1:20", building: [WxH], grid_x, grid_y, walls, title, detail_type, kind, building, etc}
+    """
+    if data is None:
+        data = {}
+    # Gate via validator any
+    drawing_type = operation or data.get("drawing_type", "plan")
+    scale = data.get("scale", "1:100")
+    # Validate drawing_type/scale ladder
+    allowed_scales = ["1:5", "1:10", "1:16", "1:20", "1:25", "1:50", "1:100", "1:150", "1:200", "1:275", "1:500"]
+    if scale not in allowed_scales and not scale.startswith("1:"):
+        return _json({"ok": False, "error": f"scale {scale} not in Hama ladder {allowed_scales}"})
+    if generate_any is None:
+        return _json({"ok": False, "error": "generators not available"})
+    try:
+        backend = await get_backend()
+    except Exception as e:
+        return _error(str(e))
+    try:
+        params = dict(data)
+        params["scale"] = scale
+        params["drawing_type"] = drawing_type
+        res = await generate_any(backend, drawing_type, params)
+        d = {"ok": True, "payload": res}
+        d = await add_screenshot_if_available(d, include_screenshot)
+        # Score via Hama composite any
+        try:
+            from .nbc.judge import hama_composite_any  # type: ignore
+
+            # Build validator features from params
+            feats: dict = {}
+            if params.get("building"):
+                # infer room area etc?
+                pass
+            comp = hama_composite_any(backend.doc, feats, drawing_type=drawing_type)
+            d["hama_score"] = comp
+        except Exception:
+            pass
+        return _json(d)
     except Exception as e:
         return _error(str(e))
 

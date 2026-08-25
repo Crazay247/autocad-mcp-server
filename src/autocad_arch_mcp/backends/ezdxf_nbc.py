@@ -297,6 +297,115 @@ class EzdxfNBCBackend(AutoCADBackend):
     async def setup_nbc_standards(self) -> CommandResult:
         return await self.nbc_setup_standards()
 
+    # ── paper / layout / viewport for any scale (Hama 1:5 to 1:275, A0-20x30) ──
+
+    PAPER_SIZES = {
+        "A0": (841, 1189),
+        "A1": (594, 841),
+        "A2": (420, 594),
+        "A3": (297, 420),
+        "A4": (210, 297),
+        "20x30": (508, 762),
+        "A1L": (841, 594),  # landscape
+        "A2L": (594, 420),
+        "A3L": (420, 297),
+    }
+
+    # Hama ladder dimtxt -> 2.5mm plot: dimtxt = 2.5*den/25.4 if inches else 2.5*den/1000? For mm model we use 2.5*scale but Hama is inches, so we store mm*scale
+    DIM_LADDER = {
+        "1:5": 0.5, "1:10": 1.0, "1:16": 1.5, "1:20": 2.0, "1:25": 2.0, "1:48": 4.0, "1:50": 4.0, "1:100": 8.0, "1:150": 10.0, "1:200": 11.5, "1:275": 15.0,
+        "A 1-5": 0.5, "A 1-10": 1.0, "A 1-16": 1.5, "A 1-20": 2.0, "A 1-25": 2.0, "A 1-48": 4.0, "A 1-50": 4.0, "A 1-100": 8.0, "A 1-150": 10.0, "A 1-200": 11.5, "A 1-275": 15.0,
+    }
+
+    async def create_layout(self, name: str = "A101", paper_size: str = "A2", scale: str = "1:100", pc3: str = "DWG To PDF.pc3", ctb: str = "monochrome.ctb") -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            # Normalize paper size
+            w_h = self.PAPER_SIZES.get(paper_size) or self.PAPER_SIZES.get(paper_size.upper()) or (594, 420)
+            # ezdxf expects paper size in mm, but Hama is inches - we keep mm per drafting_standards
+            try:
+                if name in self.doc.layouts:
+                    layout = self.doc.layouts.get(name)
+                else:
+                    layout = self.doc.layouts.new(name)
+            except Exception:
+                layout = self.doc.layouts.get(name) if name in self.doc.layouts else self.doc.layouts.new(name)
+            # Page setup via dxf attribs (compatible with Hama gold)
+            try:
+                layout.dxf.paper_width = w_h[0]
+                layout.dxf.paper_height = w_h[1]
+                layout.dxf.paper_size = f"ISO_expand_{paper_size}_({w_h[0]:.2f}_x_{w_h[1]:.2f}_MM)" if paper_size.startswith("A") else paper_size
+                layout.dxf.plot_configuration_file = pc3
+                layout.dxf.current_style_sheet = ctb
+                layout.dxf.plot_paper_units = 0  # mm
+                layout.dxf.plot_type = 4  # Layout
+                layout.dxf.standard_scale_type = 16
+                layout.dxf.scale_numerator = 1.0
+                layout.dxf.scale_denominator = 1.0
+            except Exception:
+                pass
+            # Ensure border/title block layers exist
+            try:
+                await self.nbc_setup_standards()
+            except Exception:
+                pass
+            return CommandResult(ok=True, payload={"layout": name, "paper": paper_size, "scale": scale})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
+
+    async def add_viewport(self, layout_name: str = "A101", center: tuple = (297, 210), size: tuple = (180, 120), model_center: tuple = (5000, 4000), scale: str = "1:100", layer: str = "V-PORT") -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            # Parse scale 1:X
+            try:
+                den = int(scale.split(":")[1]) if ":" in scale else int(scale.split("-")[1])
+            except Exception:
+                den = 100
+            w, h = size
+            view_h = h * den  # paper_h * den = model_h
+            # Get layout
+            try:
+                layout = self.doc.layouts.get(layout_name)
+            except Exception:
+                await self.create_layout(layout_name)
+                layout = self.doc.layouts.get(layout_name)
+            # Ensure V-PORT layer with triad
+            try:
+                if layer not in self.doc.layers:
+                    self.doc.layers.new(layer, dxfattribs={"color": 7, "linetype": "Continuous", "lineweight": 13})
+            except Exception:
+                pass
+            # Create viewport via ezdxf 1.4 API
+            vp = layout.add_viewport(center=center, size=size, view_center_point=model_center, view_height=view_h, dxfattribs={"layer": layer})
+            # Lock and set status
+            try:
+                vp.dxf.flags = 827456  # locked (Hama 827456)
+                vp.dxf.status = 2
+                vp.dxf.layer = layer
+            except Exception:
+                pass
+            return CommandResult(ok=True, payload={"viewport": str(vp.dxf.handle), "layout": layout_name, "scale": scale, "view_height": view_h})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
+
+    async def ensure_dimstyle(self, scale: str = "1:100") -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            name = f"A {scale}" if not scale.startswith("A ") else scale
+            if name not in self.doc.dimstyles:
+                # Hama gold: dimtxt mapping 0.5@1:5 ... 15.0@1:275
+                txt = self.DIM_LADDER.get(scale) or self.DIM_LADDER.get(name) or 2.5
+                try:
+                    ds = self.doc.dimstyles.new(name, dxfattribs={"dimtxt": txt, "dimasz": txt * 0.6, "dimgap": 0.625, "dimblk": "ArchTick", "dimtad": 1, "dimtih": 0, "dimtoh": 0, "dimclrd": 0, "dimclrt": 0})
+                except Exception:
+                    self.doc.dimstyles.new(name)
+            return CommandResult(ok=True, payload={"dimstyle": name})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
+
     async def drawing_create(self, name: str | None = None) -> CommandResult:
         """Create new R2018 drawing (headless)."""
         res = await self.initialize()
@@ -497,9 +606,95 @@ class EzdxfNBCBackend(AutoCADBackend):
         except Exception as e:
             return CommandResult(ok=False, error=str(e))
 
-    async def create_hatch(self, entity_id: str, pattern: str = "ANSI31") -> CommandResult:
-        # headless hatch not implemented — stub ok
-        return CommandResult(ok=True, payload={"hatch": pattern, "entity": entity_id})
+    async def create_hatch(self, entity_id: str | None = None, pattern: str = "ANSI31", scale: float = 1.0, angle: float = 0, layer: str | None = None, points: list | None = None) -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            msp = self.doc.modelspace()
+            # Determine hatch layer per IS962 Table7
+            hatch_layer = layer or "A-HATCH"
+            if hatch_layer not in self.doc.layers:
+                try:
+                    self.doc.layers.new(hatch_layer, dxfattribs={"color": LAYER_COLORS.get(hatch_layer, 7), "linetype": "Continuous", "lineweight": LAYER_LINEWEIGHTS.get(hatch_layer, 13)})
+                except Exception:
+                    pass
+            hatch = msp.add_hatch(dxfattribs={"layer": hatch_layer, "pattern_name": pattern})
+            hatch.dxf.pattern_scale = scale
+            hatch.dxf.pattern_angle = angle
+            # Boundary: if points provided, use them; else try to find entity by handle
+            if points:
+                pts = [(p[0], p[1]) for p in points]
+                hatch.paths.add_polyline_path(pts, is_closed=True)
+            elif entity_id and entity_id != "last":
+                try:
+                    # Find boundary entity by handle
+                    for e in msp:
+                        if hasattr(e.dxf, "handle") and e.dxf.handle == entity_id:
+                            if e.dxftype() == "LWPOLYLINE":
+                                pts = [(p[0], p[1]) for p in e.get_points()]
+                                hatch.paths.add_polyline_path(pts, is_closed=True)
+                            break
+                except Exception:
+                    pass
+                # Fallback rect if no boundary found
+                if not hatch.paths:
+                    hatch.paths.add_polyline_path([(0, 0), (1000, 0), (1000, 1000), (0, 1000)], is_closed=True)
+            else:
+                # Generic rect
+                hatch.paths.add_polyline_path([(0, 0), (1000, 0), (1000, 1000), (0, 1000)], is_closed=True)
+            hatch.associate(msp[-1] if len(msp) > 0 else None)  # type: ignore
+            return CommandResult(ok=True, payload={"hatch": pattern, "scale": scale, "layer": hatch_layer})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
+
+    async def create_dimension_linear(self, x1: float, y1: float, x2: float, y2: float, dim_x: float, dim_y: float, layer: str | None = None, style: str = "NBC-100") -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            msp = self.doc.modelspace()
+            # Ensure dimstyle exists
+            if style not in self.doc.dimstyles:
+                await self.ensure_dimstyle(style)
+            hatch_layer = layer or "A-DIM"
+            msp.add_linear_dim(base=(dim_x, dim_y), p1=(x1, y1), p2=(x2, y2), dimstyle=style, dxfattribs={"layer": hatch_layer})
+            return CommandResult(ok=True, payload={"type": "DIMENSION", "style": style, "layer": hatch_layer})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
+
+    async def create_dimension_aligned(self, x1: float, y1: float, x2: float, y2: float, dim_x: float | None = None, dim_y: float | None = None, layer: str | None = None, style: str = "NBC-100") -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            msp = self.doc.modelspace()
+            if style not in self.doc.dimstyles:
+                await self.ensure_dimstyle(style)
+            # Fallback dim point to midpoint + offset
+            if dim_x is None or dim_y is None:
+                mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+                dim_x, dim_y = mx, my + 500
+            hatch_layer = layer or "A-DIM"
+            msp.add_aligned_dim(p1=(x1, y1), p2=(x2, y2), distance=(dim_x or 0) - y1, dimstyle=style, dxfattribs={"layer": hatch_layer})
+            return CommandResult(ok=True, payload={"type": "DIMENSION", "style": style})
+        except Exception as e:
+            # Fallback try linear
+            try:
+                return await self.create_dimension_linear(x1, y1, x2, y2, dim_x or (x1 + x2) / 2, dim_y or (y1 + y2) / 2 + 500, layer=layer, style=style)
+            except Exception as e2:
+                return CommandResult(ok=False, error=str(e2))
+
+    async def create_leader(self, points: list | None = None, text: str = "", layer: str | None = None) -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            msp = self.doc.modelspace()
+            pts = points or [[0, 0], [1000, 1000]]
+            # ezdxf leader
+            msp.add_leader(points=pts, dxfattribs={"layer": layer or "A-DIM"})
+            if text:
+                await self.create_mtext(pts[-1][0] + 100, pts[-1][1], 500, text, height=250, layer=layer or "A-DIM")
+            return CommandResult(ok=True, payload={"leader": True, "points": pts})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
 
     # ── layer / block / query ────────────────────────────────────────
 

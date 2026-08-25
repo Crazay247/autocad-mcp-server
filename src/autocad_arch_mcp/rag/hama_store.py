@@ -236,18 +236,59 @@ def _load_or_build_store() -> None:
         _VECS.append(v)
 
 
-def hama_retrieve(intent: str, k: int = 3) -> list[dict]:
-    """Every-run retrieval: embed intent, cosine to gold vectors, return top-k with similarity."""
+def _infer_type(item: dict) -> str:
+    """Infer drawing_type from id/desc for filtering."""
+    s = (item.get("id", "") + " " + item.get("desc", "")).lower()
+    if "wall" in s:
+        return "detail"
+    if "stair" in s:
+        return "section"
+    if "toilet" in s:
+        return "detail"
+    if "metal" in s or "railing" in s:
+        return "detail"
+    if "opening" in s or "floor finish" in s:
+        return "schedule"
+    if "site" in s or "column" in s:
+        return "site"
+    if "architecture" in s or "plan" in s:
+        return "plan"
+    return "plan"
+
+
+def hama_retrieve(intent: str, k: int = 3, filter: dict | None = None) -> list[dict]:
+    """Every-run retrieval: embed intent, cosine to gold vectors, return top-k with similarity.
+
+    filter: optional {drawing_type: "detail"/"plan"/"section"/"schedule"/"site", scale: "1:5"} to boost gold matching type.
+    """
     _load_or_build_store()
     qvec = _embed([intent])[0]
     scored = []
+    intent_l = intent.lower()
     for item, vec in zip(_STORE, _VECS):
         sim = _cosine(qvec, vec)
-        scored.append((sim, item))
+        # Type/scale boost for "any" - if filter matches inferred type, boost
+        boost = 0
+        if filter:
+            dtype = filter.get("drawing_type") or filter.get("type")
+            if dtype and _infer_type(item) == dtype.lower():
+                boost += 0.3
+            scale = filter.get("scale")
+            if scale and scale in item.get("desc", ""):
+                boost += 0.2
+        # Heuristic boost: intent contains keywords matching item desc
+        # e.g., "wall detail 1:5" should boost Wall Detaills
+        if "wall" in intent_l and "wall" in item.get("desc", "").lower():
+            boost += 0.1
+        if "1:5" in intent and "1:5" in item.get("desc", ""):
+            boost += 0.1
+        if "section" in intent_l and "stair" in item.get("desc", "").lower():
+            boost += 0.1
+        scored.append((sim + boost, item))
     scored.sort(key=lambda x: x[0], reverse=True)
     out = []
     for sim, item in scored[:k]:
-        out.append({"id": item["id"], "source": item["source"], "desc": item["desc"], "score": item["score"], "similarity": float(sim), "features": item["features"]})
+        out.append({"id": item["id"], "source": item["source"], "desc": item["desc"], "score": item["score"], "similarity": float(sim), "features": item["features"], "type": _infer_type(item)})
     return out
 
 
