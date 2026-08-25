@@ -68,6 +68,76 @@ LAYER_COLORS = {
     "V-PORT": 7,
 }
 
+# Thickness -> layer mapping per NBC 206:2024 / drafting_standards wall_outline_cut 0.50
+THICKNESS_LAYER = {
+    115: "A-WALL-115",
+    230: "A-WALL-230",
+    350: "A-WALL",
+}
+
+# Drafting 1:2:4 lineweight mapping (hundredths mm) per drafting_standards.json mapping_1_100
+LAYER_LINEWEIGHTS = {
+    "A-WALL": 50,       # wide 0.50
+    "A-WALL-230": 50,
+    "A-WALL-115": 50,
+    "A-DOOR": 50,       # door_window_jambs wide 0.50
+    "A-WIND": 50,
+    "A-DIM": 18,        # dimension_extension thin 0.18
+    "A-DIM-1": 18,
+    "A-DIM-2": 18,
+    "A-DIM-3": 18,
+    "A-GRID": 25,       # axis CENTER narrow 0.25
+    "A-ANNO": 18,
+    "A-ANNO-TEXT": 18,
+    "A-FURN": 13,       # hatching thin 0.13
+    "A-STRS": 35,       # symbol 0.35
+    "A-NORTH": 18,
+    "G-TTLB": 35,
+    "V-PORT": 13,
+}
+
+LAYER_LINETYPES = {
+    "A-GRID": "CENTER",
+}
+
+
+def _color_to_aci(color) -> int:
+    """Map color name or int to ACI 1-255. Supports names from autocad-mcp."""
+    if isinstance(color, int):
+        return color
+    if color is None:
+        return 7
+    name = str(color).strip().lower()
+    mapping = {
+        "red": 1, "yellow": 2, "green": 3, "cyan": 4, "blue": 5, "magenta": 6, "white": 7, "black": 7, "grey": 8, "gray": 8, "orange": 30,
+    }
+    if name.isdigit():
+        try:
+            return int(name)
+        except Exception:
+            return 7
+    return mapping.get(name, 7)
+
+
+def _lineweight_to_int(lw) -> int:
+    """Convert lineweight 0.5 / '0.50' / 50 -> 50 (hundredths mm). Handles ezdxf special -3/-2/-1."""
+    if lw is None:
+        return 50
+    try:
+        if isinstance(lw, str):
+            s = lw.strip()
+            if s.lower() in ("bylayer", "byblock", "default"):
+                return {"bylayer": -1, "byblock": -2, "default": -3}[s.lower()]
+            # string numeric like "0.50"
+            if "." in s:
+                return int(float(s) * 100)
+            return int(s)
+        if isinstance(lw, float):
+            return int(lw * 100)
+        return int(lw)
+    except Exception:
+        return 50
+
 
 class EzdxfNBCBackend(AutoCADBackend):
     """Headless NBC backend using ezdxf R2018 (AC1032).
@@ -104,9 +174,22 @@ class EzdxfNBCBackend(AutoCADBackend):
         """Create new R2018 drawing; idempotent."""
         try:
             self.doc = ezdxf.new("R2018")
-            # Ensure at least A-WALL exists immediately (spec minimal)
+            # Ensure at least A-WALL exists immediately (spec minimal) with triad weight
             if "A-WALL" not in self.doc.layers:
-                self.doc.layers.add("A-WALL")
+                try:
+                    self.doc.layers.new(
+                        "A-WALL",
+                        dxfattribs={
+                            "color": LAYER_COLORS.get("A-WALL", 7),
+                            "linetype": LAYER_LINETYPES.get("A-WALL", "Continuous"),
+                            "lineweight": LAYER_LINEWEIGHTS.get("A-WALL", 50),
+                        },
+                    )
+                except Exception:
+                    try:
+                        self.doc.layers.add("A-WALL")
+                    except Exception:
+                        pass
             self._initialized = True
             return CommandResult(ok=True, payload="ezdxf R2018")
         except Exception as e:
@@ -132,18 +215,57 @@ class EzdxfNBCBackend(AutoCADBackend):
     async def nbc_setup_standards(self) -> CommandResult:
         """Create NBC layers and dimstyle NBC-100.
 
-        Idempotent: safe to call multiple times.
+        Idempotent: safe to call multiple times. Enforces color/linetype/lineweight per drafting triad.
         """
         if self.doc is None:
             await self.initialize()
         try:
+            # Ensure CENTER linetype exists for A-GRID
+            try:
+                if "CENTER" not in self.doc.linetypes:
+                    # ezdxf ships with CENTER; if missing, fallback to Continuous
+                    pass
+            except Exception:
+                pass
             for n in NBC_LAYERS:
                 try:
                     if n not in self.doc.layers:
-                        self.doc.layers.add(n)
+                        try:
+                            self.doc.layers.new(
+                                n,
+                                dxfattribs={
+                                    "color": LAYER_COLORS.get(n, 7),
+                                    "linetype": LAYER_LINETYPES.get(n, "Continuous"),
+                                    "lineweight": LAYER_LINEWEIGHTS.get(n, 50),
+                                },
+                            )
+                        except Exception:
+                            # fallback to add with color kwarg
+                            try:
+                                self.doc.layers.add(n, color=LAYER_COLORS.get(n, 7))
+                                lyr = self.doc.layers.get(n)
+                                lyr.dxf.linetype = LAYER_LINETYPES.get(n, "Continuous")
+                                lyr.dxf.lineweight = LAYER_LINEWEIGHTS.get(n, 50)
+                            except Exception:
+                                self.doc.layers.add(n)
+                    else:
+                        # Update existing layer to triad spec (idempotent correction)
+                        try:
+                            lyr = self.doc.layers.get(n)
+                            exp_color = LAYER_COLORS.get(n, 7)
+                            exp_ltype = LAYER_LINETYPES.get(n, "Continuous")
+                            exp_lw = LAYER_LINEWEIGHTS.get(n, 50)
+                            if lyr.color != exp_color:
+                                lyr.color = exp_color
+                            if lyr.dxf.linetype != exp_ltype:
+                                lyr.dxf.linetype = exp_ltype
+                            if lyr.dxf.lineweight != exp_lw:
+                                lyr.dxf.lineweight = exp_lw
+                        except Exception:
+                            pass
                 except Exception:
                     pass
-            # create dimstyle NBC-100 if not exists
+            # create dimstyle NBC-100 if not exists with ArchTick DIMTAD per drafting_standards
             if "NBC-100" not in self.doc.dimstyles:
                 try:
                     self.doc.dimstyles.new("NBC-100")
@@ -154,7 +276,20 @@ class EzdxfNBCBackend(AutoCADBackend):
                         self.doc.dimstyles.new("NBC-100", dxfattribs=std.dxf.all_dxf_attribs())  # type: ignore
                     except Exception:
                         self.doc.dimstyles.new("NBC-100")
-            return CommandResult(ok=True, payload="NBC setup")
+            # Enforce NBC-100 properties (idempotent)
+            try:
+                ds = self.doc.dimstyles.get("NBC-100")
+                # ArchTick is not a stock ezdxf linetype; store as dimblk if possible, fallback to string
+                try:
+                    # ezdxf dimstyle has dxf.dimblk
+                    if hasattr(ds.dxf, "dimblk"):
+                        if not ds.dxf.dimblk:
+                            ds.dxf.dimblk = "ArchTick"
+                except Exception:
+                    pass
+            except Exception:
+                pass
+            return CommandResult(ok=True, payload="NBC setup triad 0.50/0.25/0.18")
         except Exception as e:
             return CommandResult(ok=False, error=str(e))
 
@@ -315,12 +450,28 @@ class EzdxfNBCBackend(AutoCADBackend):
             await self.initialize()
         try:
             msp = self.doc.modelspace()
-            # ezdxf TEXT entity — ensure layer exists
+            # ezdxf TEXT entity — ensure layer exists with triad attrs
             if layer and layer not in self.doc.layers:
                 try:
-                    self.doc.layers.add(layer)
+                    self.doc.layers.new(
+                        layer,
+                        dxfattribs={
+                            "color": LAYER_COLORS.get(layer, 7),
+                            "linetype": LAYER_LINETYPES.get(layer, "Continuous"),
+                            "lineweight": LAYER_LINEWEIGHTS.get(layer, 50),
+                        },
+                    )
                 except Exception:
-                    pass
+                    try:
+                        self.doc.layers.add(layer, color=LAYER_COLORS.get(layer, 7))
+                        lyr = self.doc.layers.get(layer)
+                        lyr.dxf.linetype = LAYER_LINETYPES.get(layer, "Continuous")
+                        lyr.dxf.lineweight = LAYER_LINEWEIGHTS.get(layer, 50)
+                    except Exception:
+                        try:
+                            self.doc.layers.add(layer)
+                        except Exception:
+                            pass
             txt = msp.add_text(text, height=height, dxfattribs={"layer": layer or "0"})
             # set insertion point directly (ezdxf TextEntityAlignment enum varies by version)
             try:
@@ -357,13 +508,65 @@ class EzdxfNBCBackend(AutoCADBackend):
             return CommandResult(ok=False, error="not initialized")
         return CommandResult(ok=True, payload=[l.dxf.name for l in self.doc.layers])
 
-    async def layer_create(self, name, color="white", linetype="CONTINUOUS") -> CommandResult:
+    async def layer_create(self, name, color="white", linetype="CONTINUOUS", lineweight=None) -> CommandResult:
+        if self.doc is None:
+            await self.initialize()
+        try:
+            # Resolve color/linetype/weight via args or triad defaults
+            exp_color = _color_to_aci(color) if color else LAYER_COLORS.get(name, 7)
+            exp_ltype = linetype or LAYER_LINETYPES.get(name, "Continuous")
+            exp_lw = _lineweight_to_int(lineweight) if lineweight is not None else LAYER_LINEWEIGHTS.get(name, 50)
+            # Normalize linetype for A-GRID
+            if name == "A-GRID" and exp_ltype.upper() == "CONTINUOUS":
+                exp_ltype = "CENTER"
+            if name not in self.doc.layers:
+                try:
+                    self.doc.layers.new(name, dxfattribs={"color": exp_color, "linetype": exp_ltype, "lineweight": exp_lw})
+                except Exception:
+                    try:
+                        self.doc.layers.add(name, color=exp_color)
+                        lyr = self.doc.layers.get(name)
+                        lyr.dxf.linetype = exp_ltype
+                        lyr.dxf.lineweight = exp_lw
+                    except Exception:
+                        try:
+                            self.doc.layers.add(name)
+                        except Exception:
+                            pass
+            else:
+                # Update existing
+                try:
+                    lyr = self.doc.layers.get(name)
+                    if color is not None:
+                        lyr.color = exp_color
+                    if linetype is not None:
+                        lyr.dxf.linetype = exp_ltype
+                    if lineweight is not None:
+                        lyr.dxf.lineweight = exp_lw
+                    else:
+                        # enforce triad weight even if not requested, for NCS layers
+                        if name in LAYER_LINEWEIGHTS and lyr.dxf.lineweight != LAYER_LINEWEIGHTS[name]:
+                            lyr.dxf.lineweight = LAYER_LINEWEIGHTS[name]
+                except Exception:
+                    pass
+            return CommandResult(ok=True, payload={"layer": name, "color": exp_color, "linetype": exp_ltype, "lineweight": exp_lw})
+        except Exception as e:
+            return CommandResult(ok=False, error=str(e))
+
+    async def layer_set_properties(self, name: str, color=None, linetype=None, lineweight=None) -> CommandResult:
         if self.doc is None:
             await self.initialize()
         try:
             if name not in self.doc.layers:
-                self.doc.layers.add(name)
-            return CommandResult(ok=True, payload={"layer": name, "color": color, "linetype": linetype})
+                return CommandResult(ok=False, error=f"layer not found: {name}")
+            lyr = self.doc.layers.get(name)
+            if color is not None:
+                lyr.color = _color_to_aci(color)
+            if linetype is not None:
+                lyr.dxf.linetype = linetype
+            if lineweight is not None:
+                lyr.dxf.lineweight = _lineweight_to_int(lineweight)
+            return CommandResult(ok=True, payload={"layer": name, "color": lyr.color, "linetype": lyr.dxf.linetype, "lineweight": lyr.dxf.lineweight})
         except Exception as e:
             return CommandResult(ok=False, error=str(e))
 

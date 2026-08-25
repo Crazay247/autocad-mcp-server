@@ -42,6 +42,7 @@ def _load_yaml_knowledge(name: str) -> dict:
 
 _anthrop = _load_json_knowledge("anthropometry.json")
 _nbc = _load_yaml_knowledge("nbc_compliance.yaml")
+_draft = _load_json_knowledge("drafting_standards.json")
 
 # Fallback inline defaults if knowledge files missing (keeps validator importable in CI)
 if not _anthrop:
@@ -54,6 +55,8 @@ if not _anthrop:
     }
 if not _nbc:
     _nbc = {"version": "1.0.0", "unit": "mm"}
+if not _draft:
+    _draft = {"version": "1.0.0", "unit": "mm", "line_weights": {"ratio": "1:2:4", "groups": [], "mapping_1_100": {}}}
 
 # ── core validators (spec § Task 2 Step 3 verbatim, extended) ────────────
 
@@ -110,8 +113,8 @@ def validate_stair(tread: int, riser: int, jurisdiction: str = "nepal") -> dict:
     return {"compliant": compliant, "findings": findings, "formula": form}
 
 
-def validate_wall(thickness: int, jurisdiction: str = "nepal") -> dict:
-    """Nepal loadbearing thickness per nbc_compliance.yaml validation_rules."""
+def validate_wall(thickness: int, jurisdiction: str = "nepal", layer: str | None = None, lineweight: float | int | str | None = None) -> dict:
+    """Nepal loadbearing thickness per nbc_compliance.yaml + thickness->layer->weight triad per drafting_standards.json."""
     allowed = [115, 230, 350]
     # future: read dynamically from _nbc if present
     try:
@@ -122,9 +125,99 @@ def validate_wall(thickness: int, jurisdiction: str = "nepal") -> dict:
     except Exception:
         pass
     findings: list[str] = []
+    compliant = thickness in allowed
     if thickness not in allowed:
-        findings.append(f"thickness {thickness} not in {allowed}")
-    return {"compliant": thickness in allowed, "allowed": allowed, "findings": findings}
+        findings.append(f"thickness {thickness} not in {allowed} (cite NBC206 Table4)")
+    # Triad: thickness -> expected layer per NCS
+    THICKNESS_LAYER = {115: "A-WALL-115", 230: "A-WALL-230", 350: "A-WALL"}
+    expected_layer = THICKNESS_LAYER.get(thickness)
+    # Triad: drafting mapping_1_100 wall_outline_cut 0.5mm
+    expected_weight = 0.5
+    try:
+        mapping = _draft.get("line_weights", {}).get("mapping_1_100", {}).get("wall_outline_cut", {})
+        expected_weight = float(mapping.get("weight", 0.5))
+    except Exception:
+        pass
+    if layer is not None and expected_layer and layer != expected_layer:
+        compliant = False
+        findings.append(f"layer {layer} inconsistent with thickness {thickness} -> expected {expected_layer} (cite drafting_standards mapping_1_100)")
+    if lineweight is not None:
+        try:
+            lw_val = float(str(lineweight).strip()) if isinstance(lineweight, str) and "." in str(lineweight) else float(lineweight) / 100 if float(lineweight) > 5 else float(lineweight)
+            # normalize lineweight param: 50 -> 0.5, 0.5 -> 0.5
+            if lw_val > 5:
+                lw_val = lw_val / 100
+            if abs(lw_val - expected_weight) > 0.01:
+                compliant = False
+                findings.append(f"lineweight {lineweight} != expected {expected_weight} for wall (cite IS962 line_weights)")
+        except Exception:
+            pass
+    return {
+        "compliant": compliant,
+        "allowed": allowed,
+        "findings": findings,
+        "expected_layer": expected_layer,
+        "expected_lineweight": expected_weight,
+    }
+
+
+def validate_layer(name: str) -> dict:
+    """Validate NCS layer name against drafting_standards + NBC layers."""
+    # Allowed: NBC 17 + NCS plugin_set 19 (union)
+    allowed = [
+        "A-WALL", "A-WALL-230", "A-WALL-115", "A-DOOR", "A-WIND", "A-DIM", "A-DIM-1", "A-DIM-2", "A-DIM-3",
+        "A-GRID", "A-ANNO", "A-ANNO-TEXT", "A-FURN", "A-STRS", "A-NORTH", "G-TTLB", "V-PORT",
+        "A-FLOR", "A-FLOR-HATCH", "A-WALL-PATT", "A-WALL-FULL", "A-GLAZ", "A-SECT", "A-SECT-HATCH",
+    ]
+    try:
+        plugin = _draft.get("layers_AIA_NCS", {}).get("plugin_set", {})
+        if isinstance(plugin, dict):
+            allowed = list(set(allowed) | set(plugin.keys()))
+        elif isinstance(plugin, list):
+            # some versions store as list
+            allowed = list(set(allowed) | set(plugin))
+    except Exception:
+        pass
+    # Also include nbc layers_to_create
+    try:
+        for item in _nbc.get("layers_to_create", []):
+            if item not in allowed:
+                allowed.append(item)
+    except Exception:
+        pass
+    compliant = name in allowed
+    findings: list[str] = []
+    if not compliant:
+        findings.append(f"layer {name} not in allowed NCS/NBC set {sorted(allowed)} (cite NCS V6 + NBC layers_to_create)")
+    if name == "0" or name.upper() == "DEFPOINTS":
+        compliant = False
+        findings.append(f"layer {name} forbidden (cite drafting_standards: use A-* NCS, not 0/DEFPOINTS)")
+    return {"compliant": compliant, "findings": findings, "allowed": sorted(allowed)}
+
+
+def validate_lineweight(weight, context: str = "wall_outline_cut") -> dict:
+    """Validate lineweight per drafting_standards line_weights mapping_1_100."""
+    try:
+        mapping = _draft.get("line_weights", {}).get("mapping_1_100", {})
+        ctx = mapping.get(context, {})
+        expected = float(ctx.get("weight", 0.5))
+    except Exception:
+        expected = 0.5
+    try:
+        # normalize input: 50 -> 0.5, "0.50" -> 0.5, 0.25 -> 0.25
+        if isinstance(weight, str) and "." in weight:
+            val = float(weight)
+        elif isinstance(weight, (int, float)) and float(weight) > 5:
+            val = float(weight) / 100
+        else:
+            val = float(weight)
+        compliant = abs(val - expected) < 0.01
+        findings: list[str] = []
+        if not compliant:
+            findings.append(f"lineweight {weight} -> {val} != expected {expected} for {context} (cite drafting_standards line_weights)")
+        return {"compliant": compliant, "expected": expected, "value": val, "findings": findings}
+    except Exception as e:
+        return {"compliant": False, "findings": [str(e)]}
 
 
 def validate_door_width(width: int, jurisdiction: str = "nepal") -> dict:

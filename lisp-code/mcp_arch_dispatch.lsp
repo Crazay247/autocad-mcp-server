@@ -566,13 +566,19 @@
   (cons T (strcat "{\"layers\":[" layer-list "]}"))
 )
 
-(defun mcp-cmd-layer-create (params / name color linetype)
+(defun mcp-cmd-layer-create (params / name color linetype lineweight triad)
   (setq name (mcp-json-get-string params "name"))
   (setq color (mcp-json-get-string params "color"))
   (setq linetype (mcp-json-get-string params "linetype"))
+  (setq lineweight (mcp-json-get-string params "lineweight"))
   (if (not color) (setq color "white"))
   (if (not linetype) (setq linetype "CONTINUOUS"))
-  (ensure_layer_exists name color linetype)
+  ;; Apply triad defaults if layer matches NCS
+  (setq triad (triad_layer_attrs name))
+  (if (= color "white") (setq color (car triad)))
+  (if (= linetype "CONTINUOUS") (setq linetype (cadr triad)))
+  (if (not lineweight) (setq lineweight (caddr triad)))
+  (ensure_layer_exists_triage name color linetype lineweight)
   (cons T (strcat "{\"name\":\"" name "\"}"))
 )
 
@@ -582,7 +588,7 @@
   (cons T (strcat "{\"current_layer\":\"" name "\"}"))
 )
 
-(defun mcp-cmd-create-line (params / x1 y1 x2 y2 layer)
+(defun mcp-cmd-create-line (params / x1 y1 x2 y2 layer triad)
   (setq x1 (mcp-json-get-number params "x1"))
   (setq y1 (mcp-json-get-number params "y1"))
   (setq x2 (mcp-json-get-number params "x2"))
@@ -590,31 +596,31 @@
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
         (if layer
-    (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
+    (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer))
   )
   (command "_LINE" (list x1 y1 0.0) (list x2 y2 0.0) "")
   (cons T (strcat "{\"entity_type\":\"LINE\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
 
-(defun mcp-cmd-create-circle (params / cx cy radius layer)
+(defun mcp-cmd-create-circle (params / cx cy radius layer triad)
   (setq cx (mcp-json-get-number params "cx"))
   (setq cy (mcp-json-get-number params "cy"))
   (setq radius (mcp-json-get-number params "radius"))
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
         (if layer
-    (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
+    (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer))
   )
   (command "_CIRCLE" (list cx cy 0.0) radius)
   (cons T (strcat "{\"entity_type\":\"CIRCLE\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
 
-(defun mcp-cmd-create-polyline (params / pts-str closed layer pairs pt-str cx cy)
+(defun mcp-cmd-create-polyline (params / pts-str closed layer pairs pt-str cx cy triad)
   (setq pts-str (mcp-json-get-string params "points_str"))
   (setq closed (mcp-json-get-string params "closed"))
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
-        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+        (if layer (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer)))
   (if (not pts-str)
     (cons nil "points_str required (format: x1,y1;x2,y2;...)")
     (progn
@@ -632,7 +638,7 @@
   )
 )
 
-(defun mcp-cmd-create-rectangle (params / x1 y1 x2 y2 layer)
+(defun mcp-cmd-create-rectangle (params / x1 y1 x2 y2 layer triad)
   (setq x1 (mcp-json-get-number params "x1"))
   (setq y1 (mcp-json-get-number params "y1"))
   (setq x2 (mcp-json-get-number params "x2"))
@@ -640,13 +646,13 @@
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
         (if layer
-    (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
+    (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer))
   )
   (command "_RECTANG" (list x1 y1 0.0) (list x2 y2 0.0))
   (cons T (strcat "{\"entity_type\":\"LWPOLYLINE\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
 
-(defun mcp-cmd-create-text (params / x y text height rotation layer)
+(defun mcp-cmd-create-text (params / x y text height rotation layer triad)
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq text (mcp-json-get-string params "text"))
@@ -657,7 +663,7 @@
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
         (if layer
-    (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
+    (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer))
   )
   (command "_TEXT" "J" "M" (list x y 0.0) height rotation text)
   (cons T (strcat "{\"entity_type\":\"TEXT\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
@@ -932,7 +938,7 @@
 
 ;; --- Additional entity creation ---
 
-(defun mcp-cmd-create-arc (params / cx cy radius sa ea layer)
+(defun mcp-cmd-create-arc (params / cx cy radius sa ea layer triad)
   (setq cx (mcp-json-get-number params "cx"))
   (setq cy (mcp-json-get-number params "cy"))
   (setq radius (mcp-json-get-number params "radius"))
@@ -940,12 +946,12 @@
   (setq ea (mcp-json-get-number params "end_angle"))
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
-        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+        (if layer (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer)))
   (command "_ARC" "_C" (list cx cy 0.0) (list (+ cx radius) cy 0.0) "_A" (- ea sa))
   (cons T (strcat "{\"entity_type\":\"ARC\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
 
-(defun mcp-cmd-create-ellipse (params / cx cy mx my ratio layer)
+(defun mcp-cmd-create-ellipse (params / cx cy mx my ratio layer triad)
   (setq cx (mcp-json-get-number params "cx"))
   (setq cy (mcp-json-get-number params "cy"))
   (setq mx (mcp-json-get-number params "major_x"))
@@ -953,12 +959,12 @@
   (setq ratio (mcp-json-get-number params "ratio"))
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
-        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+        (if layer (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer)))
   (command "_ELLIPSE" "_C" (list cx cy 0.0) (list mx my 0.0) ratio)
   (cons T (strcat "{\"entity_type\":\"ELLIPSE\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
 
-(defun mcp-cmd-create-mtext (params / x y width text height layer)
+(defun mcp-cmd-create-mtext (params / x y width text height layer triad)
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq width (mcp-json-get-number params "width"))
@@ -967,7 +973,7 @@
   (if (not height) (setq height 2.5))
   (setq layer (mcp-json-get-string params "layer"))
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
-        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+        (if layer (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (set_current_layer layer)))
   (command "_MTEXT" (list x y 0.0) "_H" height "_W" width text "")
   (cons T (strcat "{\"entity_type\":\"MTEXT\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
@@ -1419,8 +1425,8 @@
 ;; YQArch NBC wrappers ??? whitelist implementations (ACP sanitised, undo-marked)
 ;; -----------------------------------------------------------------------
 
-(defun mcp-cmd-yq-wall (params / x1 y1 x2 y2 thickness layer sanitised result old-layer)
-  "YQArch wall via YQ_WALL (ww). Sets CLAYER WALL, uses _BEgin/_End, TRUSTEDPATHS already set, vl-catch-all-apply."
+(defun mcp-cmd-yq-wall (params / x1 y1 x2 y2 thickness layer sanitised result old-layer triad)
+  "YQArch wall via YQ_WALL (ww). Triad: 115->A-WALL-115 3/0.50, 230->A-WALL-230 4/0.50, else A-WALL 7/0.50."
   (setq x1 (mcp-json-get-number params "x1"))
   (setq y1 (mcp-json-get-number params "y1"))
   (setq x2 (mcp-json-get-number params "x2"))
@@ -1434,8 +1440,14 @@
       (setq old-layer (getvar "CLAYER"))
       (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
         (if layer
-        (progn (ensure_layer_exists (mcp-sanitise-input layer) "white" "CONTINUOUS") (setvar "CLAYER" layer))
-        (progn (ensure_layer_exists "WALL" "80" "CONTINUOUS") (setvar "CLAYER" "WALL"))
+        (progn (setq triad (triad_layer_attrs (mcp-sanitise-input layer))) (ensure_layer_exists_triage (mcp-sanitise-input layer) (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" (mcp-sanitise-input layer)))
+        (progn
+          (cond
+            ((= thickness 115) (ensure_layer_exists_triage "A-WALL-115" "3" "Continuous" "0.50") (setvar "CLAYER" "A-WALL-115"))
+            ((= thickness 230) (ensure_layer_exists_triage "A-WALL-230" "4" "Continuous" "0.50") (setvar "CLAYER" "A-WALL-230"))
+            (T (ensure_layer_exists_triage "A-WALL" "7" "Continuous" "0.50") (setvar "CLAYER" "A-WALL"))
+          )
+        )
       )
       (setq result (vl-catch-all-apply
         '(lambda ()
@@ -1454,8 +1466,8 @@
   )
 )
 
-(defun mcp-cmd-yq-hole-door (params / x y width height layer sanitised result old-layer)
-  "YQArch door hole via YQ_HOLE_DOOR (ad). CLAYER DOOR, undo-marked."
+(defun mcp-cmd-yq-hole-door (params / x y width height layer sanitised result old-layer triad)
+  "YQArch door hole via YQ_HOLE_DOOR (ad). CLAYER A-DOOR 1/0.50 triad."
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq width (mcp-json-get-number params "width"))
@@ -1468,7 +1480,10 @@
     (progn
       (command "_.UNDO" "_BEgin")
       (setq old-layer (getvar "CLAYER"))
-      (ensure_layer_exists "DOOR" "2" "CONTINUOUS") (setvar "CLAYER" "DOOR")
+      (if layer
+        (progn (setq triad (triad_layer_attrs (mcp-sanitise-input layer))) (ensure_layer_exists_triage (mcp-sanitise-input layer) (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" (mcp-sanitise-input layer)))
+        (progn (ensure_layer_exists_triage "A-DOOR" "1" "Continuous" "0.50") (setvar "CLAYER" "A-DOOR"))
+      )
       (setq result (vl-catch-all-apply
         '(lambda ()
            (cond
@@ -1486,8 +1501,8 @@
   )
 )
 
-(defun mcp-cmd-yq-hole-window (params / x y width height sill layer result old-layer)
-  "YQArch window hole via YQ_HOLE_WIN (aw) / YQ_HOLE_WINDOW (wd). CLAYER WINDOW, undo-marked."
+(defun mcp-cmd-yq-hole-window (params / x y width height sill layer result old-layer triad)
+  "YQArch window hole via YQ_HOLE_WIN (aw) / YQ_HOLE_WINDOW (wd). CLAYER A-WIND 5/0.50 triad."
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq width (mcp-json-get-number params "width"))
@@ -1501,7 +1516,10 @@
     (progn
       (command "_.UNDO" "_BEgin")
       (setq old-layer (getvar "CLAYER"))
-      (ensure_layer_exists "WINDOW" "2" "CONTINUOUS") (setvar "CLAYER" "WINDOW")
+      (if layer
+        (progn (setq triad (triad_layer_attrs (mcp-sanitise-input layer))) (ensure_layer_exists_triage (mcp-sanitise-input layer) (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" (mcp-sanitise-input layer)))
+        (progn (ensure_layer_exists_triage "A-WIND" "5" "Continuous" "0.50") (setvar "CLAYER" "A-WIND"))
+      )
       (setq result (vl-catch-all-apply
         '(lambda ()
            (cond
@@ -1520,16 +1538,20 @@
   )
 )
 
-(defun mcp-cmd-yq-hole (params / x y w h layer result old-layer)
-  "Generic YQArch hole (ho) ??? fallback rect if YQ not loaded."
+(defun mcp-cmd-yq-hole (params / x y w h layer result old-layer triad)
+  "Generic YQArch hole (ho) ??? fallback rect if YQ not loaded. Triad A-DOOR 1/0.50."
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq w (mcp-json-get-number params "width"))
   (setq h (mcp-json-get-number params "height"))
   (if (null w) (setq w 900)) (if (null h) (setq h 2100))
+  (setq layer (mcp-json-get-string params "layer"))
   (command "_.UNDO" "_BEgin")
   (setq old-layer (getvar "CLAYER"))
-  (ensure_layer_exists "DOOR" "2" "CONTINUOUS") (setvar "CLAYER" "DOOR")
+  (if layer
+    (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" layer))
+    (progn (ensure_layer_exists_triage "A-DOOR" "1" "Continuous" "0.50") (setvar "CLAYER" "A-DOOR"))
+  )
   (setq result (vl-catch-all-apply '(lambda () (if c:yq_hole (c:yq_hole (list x y 0) w) (command "_RECTANG" (list x y 0) (list (+ x w) (+ y h) 0))))))
   (if (vl-catch-all-error-p result)
     (progn (command "_.UNDO" "_End") (command "_.UNDO" "1") (setvar "CLAYER" old-layer) (cons nil (vl-catch-all-error-message result)))
@@ -1588,14 +1610,14 @@
   )
 )
 
-(defun mcp-cmd-yq-bg (params / level layer result)
-  "YQArch section levels (bg) ??? YQ_BG_SECTION_LEVELS."
+(defun mcp-cmd-yq-bg (params / level layer result triad)
+  "YQArch section levels (bg) ??? YQ_BG_SECTION_LEVELS. Triad SILL 8/0.13."
   (setq level (mcp-json-get-number params "level"))
   (setq layer (mcp-json-get-string params "layer"))
   (if (null level) (setq level 0))
   (command "_.UNDO" "_BEgin")
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
-        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (setvar "CLAYER" layer)) (progn (ensure_layer_exists "SILL" "8" "CONTINUOUS") (setvar "CLAYER" "SILL")))
+        (if layer (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" layer)) (progn (ensure_layer_exists_triage "A-ANNO" "7" "Continuous" "0.18") (setvar "CLAYER" "A-ANNO")))
   (setq result (vl-catch-all-apply '(lambda () (if c:yq_bg (c:yq_bg level) (if c:yq_bg_section_levels (c:yq_bg_section_levels level) (command "_.YQ_BG" level ""))))))
   (if (vl-catch-all-error-p result)
     (progn (command "_.UNDO" "_End") (command "_.UNDO" "1") (cons nil (vl-catch-all-error-message result)))
@@ -1603,16 +1625,20 @@
   )
 )
 
-(defun mcp-cmd-yq-stair (params / x y width length layer result old-layer)
-  "YQArch staircase plan (ltj) ??? YQ_STAIRCASE_PLAN."
+(defun mcp-cmd-yq-stair (params / x y width length layer result old-layer triad)
+  "YQArch staircase plan (ltj) ??? YQ_STAIRCASE_PLAN. Triad A-STRS 2/0.35."
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq width (mcp-json-get-number params "width"))
   (setq length (mcp-json-get-number params "length"))
+  (setq layer (mcp-json-get-string params "layer"))
   (if (null width) (setq width 1200)) (if (null length) (setq length 3000))
   (command "_.UNDO" "_BEgin")
   (setq old-layer (getvar "CLAYER"))
-  (ensure_layer_exists "STAIR" "2" "CONTINUOUS") (setvar "CLAYER" "STAIR")
+  (if layer
+    (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" layer))
+    (progn (ensure_layer_exists_triage "A-STRS" "2" "Continuous" "0.35") (setvar "CLAYER" "A-STRS"))
+  )
   (setq result (vl-catch-all-apply '(lambda () (if c:yq_staircase_plan (c:yq_staircase_plan (list x y 0) width length) (command "_.YQ_STAIRCASE_PLAN" (list x y 0) width length "")))))
   (if (vl-catch-all-error-p result)
     (progn (command "_.UNDO" "_End") (command "_.UNDO" "1") (setvar "CLAYER" old-layer) (cons nil (vl-catch-all-error-message result)))
@@ -1620,14 +1646,14 @@
   )
 )
 
-(defun mcp-cmd-create-quick-dim (params / p1s p2s layer result)
-  "Quick wall dimension (DDZ) ??? quick_dim_wall via YQArch or DIMALIGNED fallback, undo-marked."
+(defun mcp-cmd-create-quick-dim (params / p1s p2s layer result triad)
+  "Quick wall dimension (DDZ) ??? quick_dim_wall via YQArch or DIMALIGNED fallback, triad A-DIM 2/0.18."
   (setq p1s (mcp-json-get-string params "p1"))
   (setq p2s (mcp-json-get-string params "p2"))
   (setq layer (mcp-json-get-string params "layer"))
   (command "_.UNDO" "_BEgin")
   (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
-        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (setvar "CLAYER" layer)) (progn (ensure_layer_exists "A-DIM" "3" "CONTINUOUS") (setvar "CLAYER" "A-DIM")))
+        (if layer (progn (setq triad (triad_layer_attrs layer)) (ensure_layer_exists_triage layer (car triad) (cadr triad) (caddr triad)) (setvar "CLAYER" layer)) (progn (ensure_layer_exists_triage "A-DIM" "2" "Continuous" "0.18") (setvar "CLAYER" "A-DIM")))
   (setq result (vl-catch-all-apply '(lambda ()
     (cond
       (c:quick_dim_wall (c:quick_dim_wall))
@@ -1710,11 +1736,46 @@
 ;; -----------------------------------------------------------------------
 
 (if (not ensure_layer_exists)
-  (defun ensure_layer_exists (name color linetype)
-    "Create layer if it doesn't exist."
+  (defun ensure_layer_exists (name color linetype / lineweight)
+    "Create layer if it doesn't exist. Triad: color ACI, linetype, lineweight 0.50/0.25/0.18."
+    (setq lineweight nil)
+    ;; 4th arg optional: check if caller passed lineweight via extra param
+    ;; For backward compat, if linetype contains comma, split
     (if (not (tblsearch "LAYER" name))
       (command "_.-LAYER" "_NEW" name "_COLOR" color name "_LTYPE" linetype name "")
     )
+  )
+)
+;; Triad helper: ensure with weight (preferred 4-arg)
+(defun ensure_layer_exists_triage (name color linetype lineweight)
+  "Triad ensure: color ACI, linetype, lineweight string like 0.50."
+  (if (not (tblsearch "LAYER" name))
+    (progn
+      (command "_.-LAYER" "_NEW" name "_COLOR" color name "_LTYPE" linetype name "")
+      (if lineweight (command "_.-LAYER" "_LWEIGHT" lineweight name ""))
+    )
+    ;; existing layer: enforce triad
+    (progn
+      (if color (command "_.-LAYER" "_COLOR" color name ""))
+      (if linetype (command "_.-LAYER" "_LTYPE" linetype name ""))
+      (if lineweight (command "_.-LAYER" "_LWEIGHT" lineweight name ""))
+    )
+  )
+)
+(defun triad_layer_attrs (layer / color ltype weight)
+  "Return (color ltype weight) per drafting_standards triad."
+  (cond
+    ((= layer "A-WALL-115") (list "3" "Continuous" "0.50"))
+    ((= layer "A-WALL-230") (list "4" "Continuous" "0.50"))
+    ((= layer "A-WALL") (list "7" "Continuous" "0.50"))
+    ((= layer "A-GRID") (list "6" "CENTER" "0.25"))
+    ((member layer '("A-DIM" "A-DIM-1" "A-DIM-2" "A-DIM-3")) (list "2" "Continuous" "0.18"))
+    ((= layer "A-DOOR") (list "1" "Continuous" "0.50"))
+    ((= layer "A-WIND") (list "5" "Continuous" "0.50"))
+    ((= layer "A-ANNO-TEXT") (list "7" "Continuous" "0.18"))
+    ((= layer "A-FURN") (list "8" "Continuous" "0.13"))
+    ((= layer "A-STRS") (list "2" "Continuous" "0.35"))
+    (T (list "7" "Continuous" "0.50"))
   )
 )
 

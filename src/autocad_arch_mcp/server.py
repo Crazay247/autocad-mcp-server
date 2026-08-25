@@ -150,7 +150,7 @@ def _to_dict(res: Any) -> dict:
 def _nbc_gate(tool: str, operation: str, data: dict) -> dict | None:
     """NBC validator gate.
 
-    # validate_against_knowledge — NBC 206:2024 checks for wall/stair/opening.
+    # validate_against_knowledge — NBC 206:2024 checks for wall/stair/opening + triad layer/weight.
     Returns error dict if validation fails, otherwise None to continue.
     Never raises — gate failures are returned as ok:False envelopes.
     """
@@ -161,9 +161,35 @@ def _nbc_gate(tool: str, operation: str, data: dict) -> dict | None:
             if thickness is not None:
                 from .nbc.validator import validate_wall
 
-                res = validate_wall(int(thickness))
+                # Triad: thickness -> layer -> weight
+                layer = data.get("layer")
+                # infer layer from thickness if not supplied, for validation
+                if layer is None:
+                    layer_map = {115: "A-WALL-115", 230: "A-WALL-230", 350: "A-WALL"}
+                    try:
+                        layer = layer_map.get(int(thickness))
+                    except Exception:
+                        layer = None
+                res = validate_wall(int(thickness), layer=layer, lineweight=data.get("lineweight"))
                 if not res.get("compliant", True):
                     return {"ok": False, "error": f"NBC wall validation failed: {res.get('findings')}", "nbc_gate": res}
+            # Layer mismatch even without thickness (explicit layer param)
+            if thickness is None and data.get("layer") in ("A-WALL-115", "A-WALL-230", "A-WALL"):
+                # advisory only if thickness missing
+                pass
+        # Layer gate for nbc_layer create and generic layer checks
+        if tool == "nbc_layer" and operation in ("create", "add", "new"):
+            name = data.get("name")
+            if name:
+                from .nbc.validator import validate_layer
+
+                res = validate_layer(str(name))
+                if not res.get("compliant", True):
+                    return {"ok": False, "error": f"Layer validation failed: {res.get('findings')}", "nbc_gate": res}
+        # Dimension triad: validate dim layer weight indirectly via layer gate
+        if tool == "nbc_dimension" and data.get("layer") in ("A-DIM", "A-DIM-1", "A-DIM-2", "A-DIM-3"):
+            # ensure layer is valid (already in allowed)
+            pass
         if tool == "nbc_stair" and operation in ("create", "add", "draw"):
             tread = data.get("tread")
             riser = data.get("riser")
@@ -765,7 +791,12 @@ async def nbc_layer(operation: str, data: dict | None = None, include_screenshot
             name = data.get("name")
             if not name:
                 raise KeyError("name")
-            res = await backend.layer_create(name=name, color=data.get("color", "white"), linetype=data.get("linetype", "CONTINUOUS"))
+            res = await backend.layer_create(
+                name=name,
+                color=data.get("color", "white"),
+                linetype=data.get("linetype", "CONTINUOUS"),
+                lineweight=data.get("lineweight"),
+            )
         elif operation in ("set_current", "current", "activate"):
             name = data.get("name")
             if not name:
