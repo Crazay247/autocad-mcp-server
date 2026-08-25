@@ -140,11 +140,14 @@ def _check_integrity_level(hwnd: int) -> bool:
     """Check that target process integrity level <= current process.
 
     Uses OpenProcessToken + GetTokenInformation(TokenIntegrityLevel) to compare
-    integrity levels. If APIs unavailable or check fails, returns True with
-    warning (fail-open, documented).
+    integrity levels. Correctly handles TokenIntegrityLevel returning a tuple
+    (SID,) vs SID object, closes handles to avoid leaks, and is fail-closed
+    on SID-comparison failures (was fail-open). win32security unavailable
+    remains fail-open with document, as that is a platform limitation.
 
-    Returns True if integrity check passes or cannot be performed, False if
-    target is higher integrity than current (should reject capture/dispatch).
+    Returns True if integrity check passes or cannot be performed (platform
+    limitation), False if target is higher integrity than current (should
+    reject capture/dispatch) or on conversion/token errors (fail-closed).
     """
     if sys.platform != "win32":
         return True
@@ -158,64 +161,78 @@ def _check_integrity_level(hwnd: int) -> bool:
         pid_val = pid.value
         if not pid_val:
             return True
-        # For current process, pid 0 with GetCurrentProcess
-        # Simplified: if we can open target token, compare SIDs
-        # Full integrity comparison requires TokenIntegrityLevel parsing;
-        # we attempt it but fall back to True on any error.
-        #
-        # Note: This is a best-effort guard. On systems where win32security
-        # is unavailable, we document and return True.
         try:
             import win32security  # type: ignore
             import win32api  # type: ignore
             import win32process  # type: ignore
             import win32con  # type: ignore
 
-            # Current process token
-            cur_handle = win32api.GetCurrentProcess()
-            cur_token = win32security.OpenProcessToken(cur_handle, win32con.TOKEN_QUERY)
-            cur_info = win32security.GetTokenInformation(cur_token, win32security.TokenIntegrityLevel)
-            cur_sid = cur_info  # SID object
-            # Target process token
-            target_handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION, False, pid_val)
-            target_token = win32security.OpenProcessToken(target_handle, win32con.TOKEN_QUERY)
-            target_info = win32security.GetTokenInformation(target_token, win32security.TokenIntegrityLevel)
-            target_sid = target_info
-            # Compare: if target Sid > current Sid, target is higher integrity
-            # SIDs for integrity: S-1-16-0x1000 (low), 0x2000 (medium), 0x3000 (high)
-            # Win32security SIDs support comparison via ConvertSidToStringSid
+            cur_token = None
+            target_handle = None
+            target_token = None
             try:
-                cur_str = win32security.ConvertSidToStringSid(cur_sid)
-                tgt_str = win32security.ConvertSidToStringSid(target_sid)
-                # Extract RID last component after '-'
-                def rid(s: str) -> int:
-                    try:
-                        return int(s.split("-")[-1], 0)
-                    except Exception:
-                        return 0
+                # Current process token
+                cur_handle = win32api.GetCurrentProcess()
+                cur_token = win32security.OpenProcessToken(cur_handle, win32con.TOKEN_QUERY)
+                cur_info = win32security.GetTokenInformation(cur_token, win32security.TokenIntegrityLevel)
+                # TOKEN_MANDATORY_LABEL unpack fix: GetTokenInformation may return (SID,) tuple
+                cur_sid = cur_info[0] if isinstance(cur_info, tuple) else cur_info
+                # Target process token
+                target_handle = win32api.OpenProcess(win32con.PROCESS_QUERY_INFORMATION, False, pid_val)
+                target_token = win32security.OpenProcessToken(target_handle, win32con.TOKEN_QUERY)
+                target_info = win32security.GetTokenInformation(target_token, win32security.TokenIntegrityLevel)
+                target_sid = target_info[0] if isinstance(target_info, tuple) else target_info
+                # Compare: if target Sid > current Sid, target is higher integrity
+                # SIDs for integrity: S-1-16-0x1000 (low), 0x2000 (medium), 0x3000 (high)
+                try:
+                    cur_str = win32security.ConvertSidToStringSid(cur_sid)
+                    tgt_str = win32security.ConvertSidToStringSid(target_sid)
+                    # Extract RID last component after '-'
+                    def rid(s: str) -> int:
+                        try:
+                            return int(s.split("-")[-1], 0)
+                        except Exception:
+                            return 0
 
-                if rid(tgt_str) > rid(cur_str):
-                    log.warning(
-                        "integrity_level_higher",
-                        hwnd=hwnd,
-                        pid=pid_val,
-                        current=cur_str,
-                        target=tgt_str,
-                    )
+                    if rid(tgt_str) > rid(cur_str):
+                        log.warning(
+                            "integrity_level_higher",
+                            hwnd=hwnd,
+                            pid=pid_val,
+                            current=cur_str,
+                            target=tgt_str,
+                        )
+                        return False
+                except Exception as e:
+                    log.warning("integrity_sid_convert_failed", hwnd=hwnd, error=str(e))
+                    # Fail-closed: SID conversion failed after tokens acquired
                     return False
-            except Exception:
-                pass
-            return True
+                return True
+            finally:
+                # Fix leak: CloseHandle for tokens and target process handle
+                for h in (cur_token, target_token):
+                    if h is not None:
+                        try:
+                            win32api.CloseHandle(h)
+                        except Exception:
+                            pass
+                if target_handle is not None:
+                    try:
+                        win32api.CloseHandle(target_handle)
+                    except Exception:
+                        pass
+                # Note: cur_handle from GetCurrentProcess is pseudo-handle, not closed
         except ImportError:
-            # win32security not available — document limitation
+            # win32security not available — documented limitation, fail-open
             log.debug("integrity_check_win32security_unavailable", hwnd=hwnd)
             return True
         except Exception as e:
             log.warning("integrity_check_failed", hwnd=hwnd, error=str(e))
-            return True
+            # Fail-closed on exception after attempting token comparison
+            return False
     except Exception as e:
         log.warning("integrity_check_error", hwnd=hwnd, error=str(e))
-        return True
+        return False
 
 
 def find_autocad_window() -> int | None:

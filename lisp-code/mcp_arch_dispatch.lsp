@@ -80,7 +80,8 @@
 )
 
 (defun mcp-escape-string (s / result i ch code hex)
-  "Escape string for JSON. ACP-aware: 936->gbk else cp1252 on Python side; LISP escapes control chars (<32) and non-ASCII (>127) as \\uXXXX for Devanagari e.g. \\u0936\\u092f\\u0928 (शयन कक्ष)."
+  "Escape string for JSON. Interim: control chars (<32) escaped as \\uXXXX; non-ASCII (>127) replaced with \"?\" placeholder."
+  ;; TODO: full Unicode requires ACP gbk handling, interim — ascii returns byte not Unicode scalar, so >127 bytes cannot produce correct \\uXXXX codepoint
   (if (null s) (setq s ""))
   (setq result "" i 1)
   (while (<= i (strlen s))
@@ -94,8 +95,8 @@
         (setq result (strcat result "\\u" hex))
       )
       ((> code 127)
-        (setq hex (mcp-int-to-hex4 code))
-        (setq result (strcat result "\\u" hex))
+        ;; Interim: ascii byte != Unicode codepoint, so \\u escape would be wrong; use placeholder until gbk handling added
+        (setq result (strcat result "?"))
       )
       (t (setq result (strcat result ch)))
     )

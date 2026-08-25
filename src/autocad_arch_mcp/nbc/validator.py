@@ -58,25 +58,48 @@ if not _nbc:
 # ── core validators (spec § Task 2 Step 3 verbatim, extended) ────────────
 
 
+def _nbc_stair_limits():
+    """Read NBC stair limits from nbc_compliance.yaml; fallback to NBC206:2024 defaults."""
+    # defaults per NBC206:2024 (residential)
+    tread_min, tread_max, riser_min, riser_max = 250, 400, 100, 190
+    try:
+        for item in _nbc.get("NBC206_2024_content_triggers", []):
+            if isinstance(item, dict) and "staircase" in item:
+                sc = item["staircase"]
+                tread_min = int(sc.get("tread_min", tread_min))
+                # riser_max is the NBC residential limit (was 220 in anthropometry, corrected to 190 per NBC206)
+                riser_max = int(sc.get("riser_max", riser_max))
+                # optional overrides
+                if "riser_min" in sc:
+                    riser_min = int(sc["riser_min"])
+                if "tread_max" in sc:
+                    tread_max = int(sc["tread_max"])
+                break
+    except Exception:
+        pass
+    return tread_min, tread_max, riser_min, riser_max
+
+
 def validate_stair(tread: int, riser: int, jurisdiction: str = "nepal") -> dict:
     """NBC Table 4 + 2R+T formula.
 
-    - tread 250-400, riser 100-220 (anthropometry stairs_mm + nbc_compliance)
+    - tread 250-400, riser 100-190 (NBC206:2024 residential; reads riser_max from nbc_compliance.yaml)
     - formula 2*riser+tread ∈ [600,650] (comfortable 630)
     - jurisdiction currently nepal-only, kept for future india toggle
     """
-    ok = (250 <= tread <= 400) and (100 <= riser <= 220)
+    t_min, t_max, r_min, r_max = _nbc_stair_limits()
+    ok = (t_min <= tread <= t_max) and (r_min <= riser <= r_max)
     form = 2 * riser + tread
     compliant = ok and 600 <= form <= 650
     findings: list[str] = []
-    if tread < 250:
-        findings.append(f"tread {tread} < min 250")
-    elif tread > 400:
-        findings.append(f"tread {tread} > max 400")
-    if riser < 100:
-        findings.append(f"riser {riser} < min 100")
-    elif riser > 220:
-        findings.append(f"riser {riser} > max 220")
+    if tread < t_min:
+        findings.append(f"tread {tread} < min {t_min}")
+    elif tread > t_max:
+        findings.append(f"tread {tread} > max {t_max}")
+    if riser < r_min:
+        findings.append(f"riser {riser} < min {r_min}")
+    elif riser > r_max:
+        findings.append(f"riser {riser} > max {r_max}")
     if not 600 <= form <= 650:
         findings.append(f"2R+T={form} outside [600,650]")
     # keep findings empty when compliant to match spec's `[]`, but populate on fail for audit

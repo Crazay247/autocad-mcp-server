@@ -1,13 +1,13 @@
 """File IPC hardened backend for AutoCAD 2021 + YQArch (NBC).
 
 Hardened port of autocad-mcp file_ipc.py with fixes:
-- C1 ACP-aware write via _acp_encoding() (936->gbk else cp1252)
+- C1 Devanagari-safe: json ensure_ascii=True then utf-8 write (ACP gbk/cp1252 would fail for Devanagari; LISP reads ascii-safe \\uXXXX)
 - C3 cross-process mutex Global\\autocad-arch-bridge-autocad-<hwnd> (docstring + asyncio.Lock)
 - M6 asyncio.sleep for trigger (non-blocking)
 - M8 tmp->rename retry 3x with asyncio.sleep(0.02) on OSError (AV/Indexer lock)
 - JSON mismatch handling: distinguish not-yet-written vs corrupt
 - IPC_DIR per-pid under %LOCALAPPDATA%\\autocad-arch-mcp\\ipc with parent mkdir
-- HMAC-SHA256 session key os.urandom(32) + hmac_sign
+- HMAC-SHA256 session key os.urandom(32) + hmac_sign (sign stub, verify deferred)
 """
 
 from __future__ import annotations
@@ -55,14 +55,15 @@ class FileIPCArchBackend(AutoCADBackend):
       acquire the named mutex before _dispatch_unlocked and release after.
 
     Encoding hardening (C1):
-    - Command file written with _acp_encoding() (GetACP 936 -> gbk else cp1252)
-      to match AutoLISP's Windows code page. Result file read as utf-8
+    - Command file written as utf-8 with ensure_ascii=True (\\uXXXX for Devanagari)
+      so any codepage (gbk/cp1252) can read it; legacy ACP path was 936->gbk else cp1252
+      but failed for Devanagari not representable in those codepages. Result file read as utf-8
       (LISP escapes non-ASCII as \\uXXXX).
 
     HMAC hardening:
     - Per-instance session key ``self._hmac_key = os.urandom(32)``; payload
-      is signed via hmac_sign(payload_bytes, key) for integrity. The signature
-      is logged and can be verified by the LISP side if extended.
+      is signed via hmac_sign(payload_bytes, key) for integrity (stub: logged only,
+      verification deferred until LISP emits HMAC).
     """
 
     def __init__(self) -> None:
@@ -152,23 +153,26 @@ class FileIPCArchBackend(AutoCADBackend):
         # (payload signed after json dumps)
         try:
             clean_params = {k: v for k, v in params.items() if v is not None}
+            # Devanagari fix: ensure_ascii=True so payload is ASCII-safe (\uXXXX)
+            # then write as utf-8 (both ascii and utf-8 can represent it; ACP write would fail for Devanagari)
             payload_str = json.dumps(
                 {"request_id": rid, "command": command, "params": clean_params},
-                ensure_ascii=False,
+                ensure_ascii=True,
             )
-            # HMAC sign (C2 / integrity) - logged, not yet verified by LISP
+            # HMAC stub — signed for future verification; LISP side does not yet emit/verify HMAC
+            # (see _dispatch_unlocked result path: verification is stub-documented, not enforced)
             try:
-                enc_for_hmac = _acp_encoding()
-                _sig = hmac_sign(payload_str.encode(enc_for_hmac), self._hmac_key)
-                log.debug("ipc_hmac_signed", request_id=rid, sig=_sig[:12] + "...")
+                # payload is ASCII-safe after ensure_ascii=True, so utf-8 == ascii
+                _sig = hmac_sign(payload_str.encode("utf-8"), self._hmac_key)
+                log.debug("ipc_hmac_signed_stub", request_id=rid, sig=_sig[:12] + "...")
             except Exception:
                 pass
 
-            enc = _acp_encoding()
             # Atomic write with 3 retries on OSError (AV/Indexer lock -> M8 fix)
+            # Write as utf-8 ASCII-safe (ensure_ascii=True); result read is also utf-8
             for attempt in range(3):
                 try:
-                    tmp_file.write_text(payload_str, encoding=enc)
+                    tmp_file.write_text(payload_str, encoding="utf-8")
                     tmp_file.rename(cmd_file)
                     break
                 except OSError as e:
@@ -191,6 +195,8 @@ class FileIPCArchBackend(AutoCADBackend):
                         # Result is utf-8 (LISP escapes non-ASCII as \uXXXX)
                         txt = result_file.read_text(encoding="utf-8")
                         data = json.loads(txt)
+                        # HMAC verify stub: result does not yet carry HMAC; future: check data.get("hmac") via hmac_sign
+                        # No enforcement today — logged signed only; verification deferred until LISP emits HMAC
                         json_error_streak = 0
                         if data.get("request_id") == rid:
                             # Cleanup cmd and result

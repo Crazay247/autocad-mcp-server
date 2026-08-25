@@ -234,7 +234,7 @@ async def nbc_drawing(operation: str, data: dict | None = None, include_screensh
         if operation == "create":
             res = await backend.drawing_create(name=data.get("name"))
         elif operation == "open":
-            # security: validate_path if present
+            # security: validate_path — propagate failure as error JSON (was advisory pass)
             path = data.get("path")
             if path is None:
                 raise KeyError("path")
@@ -242,9 +242,8 @@ async def nbc_drawing(operation: str, data: dict | None = None, include_screensh
                 from .security import validate_path
 
                 validate_path(path)
-            except Exception:
-                # still attempt open — security gate is advisory for this stub
-                pass
+            except ValueError as e:
+                return _json({"ok": False, "error": str(e)})
             res = await backend.drawing_open(path=path)
         elif operation == "save":
             res = await backend.drawing_save(path=data.get("path"))
@@ -952,13 +951,13 @@ async def nbc_system(operation: str, data: dict | None = None, include_screensho
             res = await backend.drawing_purge() if hasattr(backend, "drawing_purge") else CommandResult(ok=True, payload="purge stub")
         elif operation in ("plot_pdf", "plot", "export_pdf"):
             path = data.get("path") or data.get("file") or "output.pdf"
-            # security gate for path
+            # security gate for path — propagate ValueError as error JSON
             try:
                 from .security import validate_path
 
                 validate_path(path)
-            except Exception:
-                pass
+            except ValueError as e:
+                return _json({"ok": False, "error": str(e)})
             if hasattr(backend, "drawing_plot_pdf"):
                 res = await backend.drawing_plot_pdf(path=path)
             else:
@@ -969,14 +968,13 @@ async def nbc_system(operation: str, data: dict | None = None, include_screensho
                 res = await backend.drawing_get_variables(names=names)
             else:
                 res = CommandResult(ok=True, payload={"variables": names})
-        elif operation in ("execute_lisp", "lisp", "eval_lisp"):
+        elif operation in ("execute_lisp", "lisp", "eval_lisp", "dotnet_invoke", "dotnet"):
             code = data.get("code") or data.get("command") or ""
-            # RCE gate: check ALLOW_RCE / ONLY_TEXT (mirrors config)
+            # RCE gate — enforce ALLOW_RCE from config.py; set AUTOCAD_ARCH_MCP_ALLOW_RCE=1 to enable
             from .config import ALLOW_RCE
 
             if not ALLOW_RCE:
-                # Still allow safe whitelisted commands via backend; backend itself enforces sanitise
-                pass
+                return _json({"ok": False, "error": "RCE disabled, set AUTOCAD_ARCH_MCP_ALLOW_RCE=1"})
             if hasattr(backend, "execute_lisp"):
                 res = await backend.execute_lisp(code=code)
             else:

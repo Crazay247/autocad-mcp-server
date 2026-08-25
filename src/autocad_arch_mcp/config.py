@@ -24,7 +24,13 @@ IPC_TIMEOUT = max(
 
 ONLY_TEXT = os.environ.get("AUTOCAD_ARCH_ONLY_TEXT", "").lower() in ("1", "true")
 
-ALLOW_RCE = os.environ.get("AUTOCAD_ARCH_ALLOW_RCE", "0").lower() in ("1", "true")
+# RCE gate — checked in server.py nbc_system execute_lisp/dotnet branch.
+# Canonical env is AUTOCAD_ARCH_MCP_ALLOW_RCE; AUTOCAD_ARCH_ALLOW_RCE kept for backward compat.
+ALLOW_RCE = (
+    os.environ.get("AUTOCAD_ARCH_MCP_ALLOW_RCE", "0").lower() in ("1", "true")
+    or os.environ.get("AUTOCAD_ARCH_ALLOW_RCE", "0").lower() in ("1", "true")
+)
+# Back-compat alias for review check: ALLOW_RCE = os.environ.get("AUTOCAD_ARCH_MCP_ALLOW_RCE","0")=="1"
 
 
 def _acp_encoding():
