@@ -588,7 +588,8 @@
   (setq x2 (mcp-json-get-number params "x2"))
   (setq y2 (mcp-json-get-number params "y2"))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer
     (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
   )
   (command "_LINE" (list x1 y1 0.0) (list x2 y2 0.0) "")
@@ -600,7 +601,8 @@
   (setq cy (mcp-json-get-number params "cy"))
   (setq radius (mcp-json-get-number params "radius"))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer
     (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
   )
   (command "_CIRCLE" (list cx cy 0.0) radius)
@@ -611,7 +613,8 @@
   (setq pts-str (mcp-json-get-string params "points_str"))
   (setq closed (mcp-json-get-string params "closed"))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
   (if (not pts-str)
     (cons nil "points_str required (format: x1,y1;x2,y2;...)")
     (progn
@@ -635,7 +638,8 @@
   (setq x2 (mcp-json-get-number params "x2"))
   (setq y2 (mcp-json-get-number params "y2"))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer
     (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
   )
   (command "_RECTANG" (list x1 y1 0.0) (list x2 y2 0.0))
@@ -651,7 +655,8 @@
   (if (not height) (setq height 2.5))
   (if (not rotation) (setq rotation 0.0))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer
     (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer))
   )
   (command "_TEXT" "J" "M" (list x y 0.0) height rotation text)
@@ -935,7 +940,8 @@
   (setq sa (mcp-json-get-number params "start_angle"))
   (setq ea (mcp-json-get-number params "end_angle"))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
   (command "_ARC" "_C" (list cx cy 0.0) (list (+ cx radius) cy 0.0) "_A" (- ea sa))
   (cons T (strcat "{\"entity_type\":\"ARC\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
@@ -947,7 +953,8 @@
   (setq my (mcp-json-get-number params "major_y"))
   (setq ratio (mcp-json-get-number params "ratio"))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
   (command "_ELLIPSE" "_C" (list cx cy 0.0) (list mx my 0.0) ratio)
   (cons T (strcat "{\"entity_type\":\"ELLIPSE\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
@@ -960,7 +967,8 @@
   (setq height (mcp-json-get-number params "height"))
   (if (not height) (setq height 2.5))
   (setq layer (mcp-json-get-string params "layer"))
-  (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (set_current_layer layer)))
   (command "_MTEXT" (list x y 0.0) "_H" height "_W" width text "")
   (cons T (strcat "{\"entity_type\":\"MTEXT\",\"handle\":\"" (cdr (assoc 5 (entget (entlast)))) "\"}"))
 )
@@ -1425,7 +1433,8 @@
     (progn
       (command "_.UNDO" "_BEgin")
       (setq old-layer (getvar "CLAYER"))
-      (if layer
+      (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer
         (progn (ensure_layer_exists (mcp-sanitise-input layer) "white" "CONTINUOUS") (setvar "CLAYER" layer))
         (progn (ensure_layer_exists "WALL" "80" "CONTINUOUS") (setvar "CLAYER" "WALL"))
       )
@@ -1433,7 +1442,7 @@
         '(lambda ()
            (cond
              (c:yq_wall (c:yq_wall (list x1 y1 0) (list x2 y2 0)))
-             ((findfile "yqarch.vlx") (command "_.YQ_WALL" (list x1 y1 0) (list x2 y2 0) ""))
+             ((findfile "yqarch.vlx") (command "WW" (list x1 y1 0) (list x2 y2 0) ""))
              (T (command "_LINE" (list x1 y1 0) (list x2 y2 0) "")) ; fallback entmake
            )
          )
@@ -1465,7 +1474,7 @@
         '(lambda ()
            (cond
              (c:yq_hole_door (c:yq_hole_door (list x y 0) width))
-             ((findfile "yqarch.vlx") (command "_.YQ_HOLE_DOOR" (list x y 0) width ""))
+             ((findfile "yqarch.vlx") (command "AD" (list x y 0) width ""))
              (T (command "_RECTANG" (list x y 0) (list (+ x width) (+ y height) 0)))
            )
          )
@@ -1586,7 +1595,8 @@
   (setq layer (mcp-json-get-string params "layer"))
   (if (null level) (setq level 0))
   (command "_.UNDO" "_BEgin")
-  (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (setvar "CLAYER" layer)) (progn (ensure_layer_exists "SILL" "8" "CONTINUOUS") (setvar "CLAYER" "SILL")))
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (setvar "CLAYER" layer)) (progn (ensure_layer_exists "SILL" "8" "CONTINUOUS") (setvar "CLAYER" "SILL")))
   (setq result (vl-catch-all-apply '(lambda () (if c:yq_bg (c:yq_bg level) (if c:yq_bg_section_levels (c:yq_bg_section_levels level) (command "_.YQ_BG" level ""))))))
   (if (vl-catch-all-error-p result)
     (progn (command "_.UNDO" "_End") (command "_.UNDO" "1") (cons nil (vl-catch-all-error-message result)))
@@ -1617,7 +1627,8 @@
   (setq p2s (mcp-json-get-string params "p2"))
   (setq layer (mcp-json-get-string params "layer"))
   (command "_.UNDO" "_BEgin")
-  (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (setvar "CLAYER" layer)) (progn (ensure_layer_exists "A-DIM" "3" "CONTINUOUS") (setvar "CLAYER" "A-DIM")))
+  (if thickness (setq WALL_DEFAULT_THICKNESS thickness))
+        (if layer (progn (ensure_layer_exists layer "white" "CONTINUOUS") (setvar "CLAYER" layer)) (progn (ensure_layer_exists "A-DIM" "3" "CONTINUOUS") (setvar "CLAYER" "A-DIM")))
   (setq result (vl-catch-all-apply '(lambda ()
     (cond
       (c:quick_dim_wall (c:quick_dim_wall))
@@ -1746,3 +1757,6 @@
 (princ *mcp-arch-ipc-dir*)
 (princ "\nReady for commands via (c:mcp-arch-dispatch)  [alias c:mcp-dispatch]")
 (princ)
+
+
+
