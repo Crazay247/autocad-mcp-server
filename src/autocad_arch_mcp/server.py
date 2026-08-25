@@ -16,112 +16,131 @@ import json
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .backends.base import CommandResult
 from .client import _error, _json, add_screenshot_if_available, get_backend
 
 mcp = FastMCP("autocad-arch-mcp")
 
-# ── Pydantic models (minimal, extra ignored) ──────────────────────────────
+# ── Pydantic models (strong, cited, extra ignored for compat) ────────────
 
 
 class DrawingCreateModel(BaseModel):
-    name: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    name: str | None = Field(default=None, description="Drawing name (optional)")
 
 
 class DrawingOpenModel(BaseModel):
-    path: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    path: str | None = Field(default=None, description="Path to .dwg/.dxf (cite security.validate_path)")
 
 
 class WallModel(BaseModel):
-    thickness: int | None = None
-    length: float | None = None
-    layer: str | None = None
-    points: str | None = None
-    start: list | None = None
-    end: list | None = None
+    model_config = ConfigDict(extra="ignore")
+    thickness: int | None = Field(default=None, ge=100, le=500, description="NBC 206 Table4 wall thickness 115/230/350 mm cite knowledge/nbc_compliance.yaml:25")
+    length: float | None = Field(default=None, description="Wall length mm")
+    layer: str | None = Field(default=None, description="NCS layer A-WALL-115/230/A-WALL per drafting_standards.json:60")
+    points: str | None = Field(default=None, description="LISP-safe points x1,y1;x2,y2")
+    start: list | None = Field(default=None, description="Start [x,y]")
+    end: list | None = Field(default=None, description="End [x,y]")
+    lineweight: str | float | None = Field(default=None, description="Lineweight 0.50/0.25/0.18 per drafting_standards mapping_1_100")
 
 
 class OpeningModel(BaseModel):
-    width: int | None = None
-    height: int | None = None
-    type: str | None = None
-    wall_id: str | None = None
-    x: float | None = None
-    y: float | None = None
+    model_config = ConfigDict(extra="ignore")
+    width: int | None = Field(default=None, ge=500, le=5400, description="Door/window width 600-1500 NBC plausible cite anthropometry.json:60, YQArch 50-5400")
+    height: int | None = Field(default=None, description="Height 2100 door / 1200 window")
+    type: str | None = Field(default=None, description="ad/aw door/window")
+    wall_id: str | None = Field(default=None, description="Host wall handle")
+    x: float | None = Field(default=None, description="Insertion x mm")
+    y: float | None = Field(default=None, description="Insertion y mm")
+    layer: str | None = Field(default=None, description="A-DOOR/A-WIND per NCS")
+    area: float | None = Field(default=None, description="Room area m2 for validate_room_area jurisdiction nepal/india")
 
 
 class EntityModel(BaseModel):
-    type: str | None = None
-    layer: str | None = None
-    x1: float | None = None
-    y1: float | None = None
-    x2: float | None = None
-    y2: float | None = None
-    cx: float | None = None
-    cy: float | None = None
-    radius: float | None = None
-    entity_id: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    type: str | None = Field(default=None, description="LINE/CIRCLE etc")
+    layer: str | None = Field(default=None, description="NCS layer, never 0/DEFPOINTS cite validator.validate_layer")
+    x1: float | None = Field(default=None, description="x1 mm")
+    y1: float | None = Field(default=None, description="y1 mm")
+    x2: float | None = Field(default=None, description="x2 mm")
+    y2: float | None = Field(default=None, description="y2 mm")
+    cx: float | None = Field(default=None, description="Center x mm")
+    cy: float | None = Field(default=None, description="Center y mm")
+    radius: float | None = Field(default=None, description="Radius mm")
+    entity_id: str | None = Field(default=None, description="Entity handle or 'last'")
 
 
 class StairModel(BaseModel):
-    tread: int | None = None
-    riser: int | None = None
-    width: float | None = None
-    jurisdiction: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    tread: int | None = Field(default=None, ge=200, le=400, description="Tread 250-400 NBC Table4 cite nbc_compliance.yaml")
+    riser: int | None = Field(default=None, ge=100, le=250, description="Riser 100-190 + 2R+T 600-650")
+    width: float | None = Field(default=None, ge=800, le=3000, description="Stair width 1000-2000 per occupancy")
+    jurisdiction: str | None = Field(default=None, description="nepal/india/comfortable")
+    layer: str | None = Field(default=None, description="A-STRS per NCS, 2/0.35")
 
 
 class DecorModel(BaseModel):
-    pattern: str | None = None
-    entity_id: str | None = None
-    type: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    pattern: str | None = Field(default=None, description="Hatch pattern AR-BRSTD/AR-CONC/ANSI31 per IS962 Table7")
+    entity_id: str | None = Field(default=None, description="Host entity handle")
+    type: str | None = Field(default=None, description="jj/wc furniture type")
 
 
 class DimensionModel(BaseModel):
-    x1: float | None = None
-    y1: float | None = None
-    x2: float | None = None
-    y2: float | None = None
-    dim_x: float | None = None
-    dim_y: float | None = None
-    offset: float | None = None
+    model_config = ConfigDict(extra="ignore")
+    x1: float | None = Field(default=None, description="Extension origin1 x mm")
+    y1: float | None = Field(default=None, description="y1 mm")
+    x2: float | None = Field(default=None, description="x2 mm")
+    y2: float | None = Field(default=None, description="y2 mm")
+    dim_x: float | None = Field(default=None, description="Dim line x mm")
+    dim_y: float | None = Field(default=None, description="y mm")
+    offset: float | None = Field(default=None, description="Offset for DIMALIGNED")
+    layer: str | None = Field(default=None, description="A-DIM-1/2/3 per drafting triad, 2/0.18")
+    style: str | None = Field(default=None, description="NBC-100 ArchTick DIMTAD1")
 
 
 class SectionModel(BaseModel):
-    name: str | None = None
-    points: list | None = None
-    cut_line: list | None = None
+    model_config = ConfigDict(extra="ignore")
+    name: str | None = Field(default=None, description="Section name A-A")
+    points: list | None = Field(default=None, description="Cut polyline points")
+    cut_line: list | None = Field(default=None, description="Cut line [x1,y1,x2,y2]")
 
 
 class LayerModel(BaseModel):
-    name: str | None = None
-    color: str | int | None = None
-    linetype: str | None = None
-    lineweight: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    name: str | None = Field(default=None, description="NCS layer A-WALL-230 etc, never 0 cite validator.validate_layer")
+    color: str | int | None = Field(default=None, description="ACI 1-8 or name red/cyan per LAYER_COLORS")
+    linetype: str | None = Field(default=None, description="Continuous/CENTER per drafting_standards")
+    lineweight: str | None = Field(default=None, description="0.50/0.25/0.18 per mapping_1_100, ezdxf 50/25/18")
 
 
 class BlockModel(BaseModel):
-    name: str | None = None
-    x: float | None = None
-    y: float | None = None
-    scale: float | None = None
-    rotation: float | None = None
-    attributes: dict | None = None
-    block_id: str | None = None
+    model_config = ConfigDict(extra="ignore")
+    name: str | None = Field(default=None, description="Block name NORTH.dwg etc")
+    x: float | None = Field(default=None, description="Insert x mm")
+    y: float | None = Field(default=None, description="Insert y mm")
+    scale: float | None = Field(default=None, description="Scale 1.0")
+    rotation: float | None = Field(default=None, description="Rotation deg")
+    attributes: dict | None = Field(default=None, description="Attributes dict")
+    block_id: str | None = Field(default=None, description="Block handle")
 
 
 class ViewModel(BaseModel):
-    x1: float | None = None
-    y1: float | None = None
-    x2: float | None = None
-    y2: float | None = None
+    model_config = ConfigDict(extra="ignore")
+    x1: float | None = Field(default=None, description="Window x1 mm")
+    y1: float | None = Field(default=None, description="y1 mm")
+    x2: float | None = Field(default=None, description="x2 mm")
+    y2: float | None = Field(default=None, description="y2 mm")
 
 
 class SystemModel(BaseModel):
-    command: str | None = None
-    path: str | None = None
-    names: list | None = None
+    model_config = ConfigDict(extra="ignore")
+    command: str | None = Field(default=None, description="System command")
+    path: str | None = Field(default=None, description="Path .dwg/.dxf/.pdf")
+    names: list | None = Field(default=None, description="Variable names")
 
 
 # ── helpers ───────────────────────────────────────────────────────────────
@@ -221,6 +240,48 @@ def _nbc_gate(tool: str, operation: str, data: dict) -> dict | None:
                         return {"ok": False, "error": f"NBC room area validation failed: {res.get('findings')}", "nbc_gate": res}
                 except Exception:
                     pass
+            # light/vent check
+            if data.get("window_area") is not None and data.get("floor_area") is not None:
+                try:
+                    from .nbc.validator import validate_light_vent
+
+                    res = validate_light_vent(float(data.get("window_area")), float(data.get("floor_area")), hills=data.get("hills", True))
+                    if not res.get("compliant", True):
+                        return {"ok": False, "error": f"Light/vent validation failed: {res.get('findings')}", "nbc_gate": res}
+                except Exception:
+                    pass
+        # Composite scoring for strong instruction — block if score <85 (municipal threshold per system-prompt.md)
+        try:
+            from .nbc.validator import score_drawing
+
+            features: dict = {}
+            if data.get("thickness") is not None:
+                features["thickness"] = data.get("thickness")
+                features["layer"] = data.get("layer")
+                features["lineweight"] = data.get("lineweight")
+                if data.get("layer"):
+                    features["layer"] = data.get("layer")
+            if data.get("tread") is not None and data.get("riser") is not None:
+                features["tread"] = data.get("tread")
+                features["riser"] = data.get("riser")
+            if data.get("width") is not None and tool in ("nbc_opening", "nbc_entity"):
+                features["door_width"] = data.get("width")
+            if data.get("area") is not None or data.get("room_area") is not None:
+                features["room_area"] = data.get("area") or data.get("room_area")
+                features["jurisdiction"] = data.get("jurisdiction", "nepal")
+            if data.get("window_area") is not None and data.get("floor_area") is not None:
+                features["window_area"] = data.get("window_area")
+                features["floor_area"] = data.get("floor_area")
+                features["hills"] = data.get("hills", True)
+            if data.get("corridor_width") is not None or data.get("travel_distance") is not None:
+                features["corridor_width"] = data.get("corridor_width", 2000)
+                features["travel_distance"] = data.get("travel_distance", 0)
+            if features:
+                res_score = score_drawing(features)
+                if res_score.get("score", 100) < 85:
+                    return {"ok": False, "error": f"Drawing score {res_score.get('score')}/100 <85 blocked: {res_score.get('findings')}", "nbc_gate": res_score, "score": res_score}
+        except Exception:
+            pass
     except Exception:
         # gate never blocks on internal error — log and continue (fail-open for robustness)
         return None

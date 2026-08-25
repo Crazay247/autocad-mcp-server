@@ -250,3 +250,208 @@ def validate_room_area(area: float, jurisdiction: str = "nepal") -> dict:
     if not compliant:
         findings.append(f"area {area} < min {min_area} for {jurisdiction}")
     return {"compliant": compliant, "min_area": min_area, "area": area, "findings": findings}
+
+
+# ── composite scoring (0-100) + additional validators for strong instruction ──
+
+
+def validate_light_vent(window_area: float, floor_area: float, hills: bool = True) -> dict:
+    """Light 1/10 hills 1/8 other, vent 1/16, hospitals 1/8 per nbc_compliance light_ventilation."""
+    try:
+        ratio = window_area / floor_area if floor_area > 0 else 0
+        exp = 0.10 if hills else 0.125  # 1/10 vs 1/8
+        compliant = ratio >= exp
+        findings: list[str] = []
+        if not compliant:
+            findings.append(f"window/floor {ratio:.3f} < {exp:.3f} ({'1/10 hills' if hills else '1/8 other'} cite NBC S3.3)")
+        # vent: at least half of light? simplified
+        vent_ok = ratio >= 0.0625  # 1/16
+        if not vent_ok:
+            findings.append(f"vent ratio {ratio:.3f} < 0.0625 (1/16 cite NBC)")
+        return {"compliant": compliant and vent_ok, "ratio": ratio, "expected": exp, "findings": findings}
+    except Exception as e:
+        return {"compliant": False, "findings": [str(e)]}
+
+
+def validate_circulation(corridor_width: float, travel_distance: float, hills: bool = True) -> dict:
+    """Corridor 2000 India / Table3 Nepal, travel 30000/40000 per NBC."""
+    findings: list[str] = []
+    compliant = True
+    if corridor_width < 2000:
+        compliant = False
+        findings.append(f"corridor {corridor_width} < 2000 (cite NBC corridor_min)")
+    limit = 30000 if not hills else 30000  # simplified 30m, 40m external
+    if travel_distance > limit:
+        compliant = False
+        findings.append(f"travel {travel_distance} > {limit} (cite NBC travel_max)")
+    return {"compliant": compliant, "findings": findings}
+
+
+def validate_vastu(room: str, quadrant: str, vastu_enabled: bool = False) -> dict:
+    """Vastu guidance: NE kitchen SW master, NE entry, Brahmasthana void. Only if enabled."""
+    if not vastu_enabled:
+        return {"compliant": True, "findings": [], "note": "vastu disabled (secular NBC-only)"}
+    ideal = {"kitchen": "NE", "master": "SW", "entry": "NE", "toilet": "NW", "living": "N"}
+    exp = ideal.get(room.lower())
+    findings: list[str] = []
+    compliant = True
+    if exp and quadrant.upper() != exp:
+        compliant = False
+        findings.append(f"vastu: {room} in {quadrant} expected {exp} (opt-in, weight 10)")
+    return {"compliant": compliant, "findings": findings, "expected": exp}
+
+
+# Weights sum 100 per system-prompt rubric
+SCORE_WEIGHTS = {
+    "wall_thickness": 20,
+    "wall_triad": 15,
+    "stair": 15,
+    "door": 5,
+    "room_area": 10,
+    "light_vent": 10,
+    "lineweight": 10,
+    "layer_naming": 5,
+    "circulation": 5,
+    "screenshot": 5,
+}
+
+
+def score_drawing(features: dict) -> dict:
+    """Composite 0-100 score. features: dict with keys like thickness, layer, lineweight, tread, riser, door_width, room_area, window_area, floor_area, hills, corridor_width, travel_distance, layers_ok, screenshot_ok etc."""
+    total = 0
+    breakdown: dict[str, int] = {}
+    all_findings: list[str] = []
+    severities: list[str] = []
+
+    # Wall thickness 20
+    t = features.get("thickness")
+    if t is not None:
+        r = validate_wall(int(t), layer=features.get("layer"), lineweight=features.get("lineweight"))
+        s = SCORE_WEIGHTS["wall_thickness"] if r["compliant"] and not any("thickness" in f for f in r["findings"]) else 0
+        # partial if only thickness ok but triad fails -> separate bucket
+        breakdown["wall_thickness"] = s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+            severities.append("critical" if s == 0 else "major")
+        total += s
+    else:
+        breakdown["wall_thickness"] = SCORE_WEIGHTS["wall_thickness"]
+
+    # Wall triad 15 (layer/weight)
+    layer = features.get("layer")
+    lw = features.get("lineweight")
+    if t is not None and layer is not None:
+        r = validate_wall(int(t), layer=layer, lineweight=lw)
+        # if thickness ok but triad fails -> deduct
+        if any("layer" in f or "lineweight" in f for f in r["findings"]):
+            breakdown["wall_triad"] = 0
+            all_findings.extend([f for f in r["findings"] if "layer" in f or "lineweight" in f])
+            severities.append("major")
+        else:
+            breakdown["wall_triad"] = SCORE_WEIGHTS["wall_triad"]
+            total += SCORE_WEIGHTS["wall_triad"]
+    else:
+        breakdown["wall_triad"] = SCORE_WEIGHTS["wall_triad"]
+        total += SCORE_WEIGHTS["wall_triad"] if t is None else 0
+
+    # Stair 15
+    if "tread" in features and "riser" in features:
+        r = validate_stair(int(features["tread"]), int(features["riser"]))
+        s = SCORE_WEIGHTS["stair"] if r["compliant"] else 0
+        breakdown["stair"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+            severities.append("major" if s == 0 else "minor")
+    else:
+        breakdown["stair"] = SCORE_WEIGHTS["stair"]
+        total += SCORE_WEIGHTS["stair"]  # no stair -> neutral
+
+    # Door 5
+    if "door_width" in features:
+        r = validate_door_width(int(features["door_width"]))
+        s = SCORE_WEIGHTS["door"] if r["compliant"] else 0
+        breakdown["door"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+    else:
+        breakdown["door"] = SCORE_WEIGHTS["door"]
+        total += SCORE_WEIGHTS["door"]
+
+    # Room area 10
+    if "room_area" in features:
+        r = validate_room_area(float(features["room_area"]), jurisdiction=features.get("jurisdiction", "nepal"))
+        s = SCORE_WEIGHTS["room_area"] if r["compliant"] else 0
+        breakdown["room_area"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+    else:
+        breakdown["room_area"] = SCORE_WEIGHTS["room_area"]
+        total += SCORE_WEIGHTS["room_area"]
+
+    # Light/vent 10
+    if "window_area" in features and "floor_area" in features:
+        r = validate_light_vent(float(features["window_area"]), float(features["floor_area"]), hills=features.get("hills", True))
+        s = SCORE_WEIGHTS["light_vent"] if r["compliant"] else 0
+        breakdown["light_vent"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+    else:
+        breakdown["light_vent"] = SCORE_WEIGHTS["light_vent"]
+        total += SCORE_WEIGHTS["light_vent"]
+
+    # Lineweight 10 (standalone)
+    if "lineweight" in features and "context" in features:
+        r = validate_lineweight(features["lineweight"], context=features["context"])
+        s = SCORE_WEIGHTS["lineweight"] if r["compliant"] else 0
+        breakdown["lineweight"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+    else:
+        breakdown["lineweight"] = SCORE_WEIGHTS["lineweight"]
+        total += SCORE_WEIGHTS["lineweight"]
+
+    # Layer naming 5
+    if "layer" in features:
+        r = validate_layer(str(features["layer"]))
+        s = SCORE_WEIGHTS["layer_naming"] if r["compliant"] else 0
+        breakdown["layer_naming"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+    else:
+        breakdown["layer_naming"] = SCORE_WEIGHTS["layer_naming"]
+        total += SCORE_WEIGHTS["layer_naming"]
+
+    # Circulation 5
+    if "corridor_width" in features or "travel_distance" in features:
+        r = validate_circulation(float(features.get("corridor_width", 2000)), float(features.get("travel_distance", 0)))
+        s = SCORE_WEIGHTS["circulation"] if r["compliant"] else 0
+        breakdown["circulation"] = s
+        total += s
+        if r["findings"]:
+            all_findings.extend(r["findings"])
+    else:
+        breakdown["circulation"] = SCORE_WEIGHTS["circulation"]
+        total += SCORE_WEIGHTS["circulation"]
+
+    # Screenshot 5
+    if "screenshot_ok" in features:
+        s = SCORE_WEIGHTS["screenshot"] if features["screenshot_ok"] else 0
+        breakdown["screenshot"] = s
+        total += s
+        if not features["screenshot_ok"]:
+            all_findings.append("screenshot variance fail (not-black check)")
+    else:
+        breakdown["screenshot"] = SCORE_WEIGHTS["screenshot"]
+        total += SCORE_WEIGHTS["screenshot"]
+
+    # Cap at 100
+    total = min(100, total)
+    compliant = total >= 85
+    severity = "critical" if total < 50 else "major" if total < 85 else "minor" if total < 95 else "ok"
+    return {"score": total, "compliant": compliant, "findings": all_findings, "breakdown": breakdown, "severity": severity}
