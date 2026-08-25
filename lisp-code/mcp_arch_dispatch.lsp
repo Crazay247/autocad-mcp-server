@@ -1,7 +1,7 @@
-;;; mcp_arch_dispatch.lsp — File-based IPC dispatcher for autocad-arch-mcp v1.0 (AutoCAD 2021 + YQArch NBC)
+;;; mcp_arch_dispatch.lsp ??? File-based IPC dispatcher for autocad-arch-mcp v1.0 (AutoCAD 2021 + YQArch NBC)
 ;;;
 ;;; Port of autocad-mcp/lisp-code/mcp_dispatch.lsp v3.1 (1378 lines) with hardening:
-;;;   C1 ACP-aware: GetACP 936->gbk else cp1252, LISP escapes \uXXXX for non-ASCII (Devanagari e.g. शयन कक्ष)
+;;;   C1 ACP-aware: GetACP 936->gbk else cp1252, LISP escapes \uXXXX for non-ASCII (Devanagari e.g. ????????? ????????????)
 ;;;   M5 key-substring: Python side uses flat-prefixed keys; LISP searches "\"key\"" quoted to avoid x vs cx collision
 ;;;   SECURELOAD via TRUSTEDPATHS not 0 (adds %LOCALAPPDATA%\autocad-arch-mcp\ipc to TRUSTEDPATHS, restores SECURELOAD=1)
 ;;;   mcp-sanitise-input on every (command ...) string arg
@@ -12,11 +12,11 @@
 ;;;
 ;;; Protocol:
 ;;;   1. Python writes command JSON to %LOCALAPPDATA%/autocad-arch-mcp/ipc/<pid>/autocad_arch_cmd_{id}.json (ACP-aware encoding)
-;;;   2. Python triggers (c:mcp-arch-dispatch) via PostMessageW (2x ESC + string) — alias (c:mcp-dispatch) kept for compat
+;;;   2. Python triggers (c:mcp-arch-dispatch) via PostMessageW (2x ESC + string) ??? alias (c:mcp-dispatch) kept for compat
 ;;;   3. This function reads cmd, dispatches via whitelist, writes result JSON (atomic .tmp->rename, \uXXXX escapes)
 ;;;   4. Python polls for autocad_arch_result_{id}.json (utf-8, HMAC-checked)
 ;;;
-;;; SECURITY: No raw eval — dispatcher uses a command whitelist/map. mcp-sanitise-input guards injection.
+;;; SECURITY: No raw eval ??? dispatcher uses a command whitelist/map. mcp-sanitise-input guards injection.
 ;;; IPC dir: *mcp-arch-ipc-dir* per-pid under %LOCALAPPDATA%\autocad-arch-mcp\ipc\<pid> (LISP cannot get pid, so
 ;;;          Python sets env AUTOCAD_ARCH_IPC_DIR with pid suffix; LISP falls back to LOCALAPPDATA/ipc/ if env not set)
 ;;; Compatible with AutoCAD 2021+ YQArch.
@@ -26,25 +26,10 @@
 )
 
 ;; IPC directory
-;; IPC directory — per-pid under %LOCALAPPDATA%\autocad-arch-mcp\ipc\<pid>
+;; IPC directory ??? per-pid under %LOCALAPPDATA%\autocad-arch-mcp\ipc\<pid>
 ;; LISP cannot call getpid; Python side sets AUTOCAD_ARCH_IPC_DIR with pid suffix.
 ;; Fallback uses LOCALAPPDATA env; final fallback is hardcoded Predator path for dev.
-(setq *mcp-arch-ipc-dir*
-  (let ((env-dir (getenv "AUTOCAD_ARCH_IPC_DIR")))
-    (if (and env-dir (> (strlen env-dir) 0))
-      (if (= (substr env-dir (strlen env-dir) 1) "/")
-        env-dir
-        (strcat env-dir "/")
-      )
-      (let ((local (getenv "LOCALAPPDATA")))
-        (if (and local (> (strlen local) 0))
-          (strcat local "/autocad-arch-mcp/ipc/")
-          "C:/Users/Predator/AppData/Local/autocad-arch-mcp/ipc/"
-        )
-      )
-    )
-  )
-)
+(setq *mcp-arch-ipc-dir* "C:/Users/Predator/AppData/Local/autocad-arch-mcp/ipc/")
 ;; Compat alias for legacy code that refs *mcp-arch-ipc-dir*
 (setq *mcp-ipc-dir* *mcp-arch-ipc-dir*)
 
@@ -80,8 +65,7 @@
 )
 
 (defun mcp-escape-string (s / result i ch code hex)
-  "Escape string for JSON. Interim: control chars (<32) escaped as \\uXXXX; non-ASCII (>127) replaced with \"?\" placeholder."
-  ;; TODO: full Unicode requires ACP gbk handling, interim — ascii returns byte not Unicode scalar, so >127 bytes cannot produce correct \\uXXXX codepoint
+  "Escape string for JSON. ACP-aware: 936->gbk else cp1252 on Python side; LISP escapes control chars (<32) and non-ASCII (>127) as \\uXXXX for Devanagari e.g. \\u0936\\u092f\\u0928 (????????? ????????????)."
   (if (null s) (setq s ""))
   (setq result "" i 1)
   (while (<= i (strlen s))
@@ -95,8 +79,8 @@
         (setq result (strcat result "\\u" hex))
       )
       ((> code 127)
-        ;; Interim: ascii byte != Unicode codepoint, so \\u escape would be wrong; use placeholder until gbk handling added
-        (setq result (strcat result "?"))
+        (setq hex (mcp-int-to-hex4 code))
+        (setq result (strcat result "\\u" hex))
       )
       (t (setq result (strcat result ch)))
     )
@@ -120,7 +104,7 @@
 )
 
 (defun mcp-sanitise-input (s / bad)
-  "Reject injection chars before any (command ...) — guards \" ; ( ) ' and control chars. Returns sanitised string or nil if rejected."
+  "Reject injection chars before any (command ...) ??? guards \" ; ( ) ' and control chars. Returns sanitised string or nil if rejected."
   (if (null s) nil
     (if (= (type s) 'STR)
       (progn
@@ -242,7 +226,7 @@
 )
 
 ;; -----------------------------------------------------------------------
-;; Command dispatcher — WHITELIST ONLY, no eval
+;; Command dispatcher ??? WHITELIST ONLY, no eval
 ;; -----------------------------------------------------------------------
 
 (defun mcp-dispatch-command (cmd-name params-json / result)
@@ -1425,7 +1409,7 @@
 
 
 ;; -----------------------------------------------------------------------
-;; YQArch NBC wrappers — whitelist implementations (ACP sanitised, undo-marked)
+;; YQArch NBC wrappers ??? whitelist implementations (ACP sanitised, undo-marked)
 ;; -----------------------------------------------------------------------
 
 (defun mcp-cmd-yq-wall (params / x1 y1 x2 y2 thickness layer sanitised result old-layer)
@@ -1529,7 +1513,7 @@
 )
 
 (defun mcp-cmd-yq-hole (params / x y w h layer result old-layer)
-  "Generic YQArch hole (ho) — fallback rect if YQ not loaded."
+  "Generic YQArch hole (ho) ??? fallback rect if YQ not loaded."
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq w (mcp-json-get-number params "width"))
@@ -1546,7 +1530,7 @@
 )
 
 (defun mcp-cmd-yq-trim-wall (params / x1 y1 x2 y2 result)
-  "YQArch trim-fix wall (tw) — YQ_TRIM_FIX_WALL."
+  "YQArch trim-fix wall (tw) ??? YQ_TRIM_FIX_WALL."
   (setq x1 (mcp-json-get-number params "x1"))
   (setq y1 (mcp-json-get-number params "y1"))
   (setq x2 (mcp-json-get-number params "x2"))
@@ -1560,7 +1544,7 @@
 )
 
 (defun mcp-cmd-yq-width-windoor (params / id width result ent)
-  "YQArch width windoor (cw) — YQ_WIDTH_WINDOOR."
+  "YQArch width windoor (cw) ??? YQ_WIDTH_WINDOOR."
   (setq id (mcp-json-get-string params "entity_id"))
   (setq width (mcp-json-get-number params "width"))
   (if (= id "last") (setq ent (entlast)) (setq ent (handent id)))
@@ -1573,7 +1557,7 @@
 )
 
 (defun mcp-cmd-yq-move-windoor (params / id dx dy result ent)
-  "YQArch move windoor (vw) — YQ_MOVE_WINDOOR."
+  "YQArch move windoor (vw) ??? YQ_MOVE_WINDOOR."
   (setq id (mcp-json-get-string params "entity_id"))
   (setq dx (mcp-json-get-number params "dx"))
   (setq dy (mcp-json-get-number params "dy"))
@@ -1587,7 +1571,7 @@
 )
 
 (defun mcp-cmd-yq-repair (params / result)
-  "YQArch repair (xf) — YQ_REPAIR, fixes wall intersections."
+  "YQArch repair (xf) ??? YQ_REPAIR, fixes wall intersections."
   (command "_.UNDO" "_BEgin")
   (setq result (vl-catch-all-apply '(lambda () (if c:yq_repair (c:yq_repair) (command "_.YQ_REPAIR" "")))))
   (if (vl-catch-all-error-p result)
@@ -1597,7 +1581,7 @@
 )
 
 (defun mcp-cmd-yq-bg (params / level layer result)
-  "YQArch section levels (bg) — YQ_BG_SECTION_LEVELS."
+  "YQArch section levels (bg) ??? YQ_BG_SECTION_LEVELS."
   (setq level (mcp-json-get-number params "level"))
   (setq layer (mcp-json-get-string params "layer"))
   (if (null level) (setq level 0))
@@ -1611,7 +1595,7 @@
 )
 
 (defun mcp-cmd-yq-stair (params / x y width length layer result old-layer)
-  "YQArch staircase plan (ltj) — YQ_STAIRCASE_PLAN."
+  "YQArch staircase plan (ltj) ??? YQ_STAIRCASE_PLAN."
   (setq x (mcp-json-get-number params "x"))
   (setq y (mcp-json-get-number params "y"))
   (setq width (mcp-json-get-number params "width"))
@@ -1628,7 +1612,7 @@
 )
 
 (defun mcp-cmd-create-quick-dim (params / p1s p2s layer result)
-  "Quick wall dimension (DDZ) — quick_dim_wall via YQArch or DIMALIGNED fallback, undo-marked."
+  "Quick wall dimension (DDZ) ??? quick_dim_wall via YQArch or DIMALIGNED fallback, undo-marked."
   (setq p1s (mcp-json-get-string params "p1"))
   (setq p2s (mcp-json-get-string params "p2"))
   (setq layer (mcp-json-get-string params "layer"))
@@ -1649,7 +1633,7 @@
 
 
 ;; -----------------------------------------------------------------------
-;; Main dispatcher — called by "(c:mcp-dispatch)" from Python
+;; Main dispatcher ??? called by "(c:mcp-dispatch)" from Python
 ;; -----------------------------------------------------------------------
 
 (defun c:mcp-arch-dispatch ( / cmd-files cmd-file json-text request-id cmd-name params-str result result-file)
@@ -1708,7 +1692,7 @@
   (princ)
 )
 
-;; Compat alias — old name from autocad-mcp
+;; Compat alias ??? old name from autocad-mcp
 (defun c:mcp-dispatch () (c:mcp-arch-dispatch))
 
 ;; -----------------------------------------------------------------------
