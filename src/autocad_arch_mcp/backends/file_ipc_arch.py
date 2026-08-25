@@ -68,21 +68,15 @@ class FileIPCArchBackend(AutoCADBackend):
 
     def __init__(self) -> None:
         # Resolve IPC dir respecting runtime env override (tests monkeypatch
-        # AUTOCAD_ARCH_IPC_DIR after config import). Spec: IPC_DIR =
-        # Path(os.environ.get("AUTOCAD_ARCH_IPC_DIR",
-        #   os.path.expandvars(r"%LOCALAPPDATA%\\autocad-arch-mcp\\ipc")))/str(os.getpid())
-        # We recompute from env to honor monkeypatch, falling back to imported IPC_DIR.
+        # AUTOCAD_ARCH_IPC_DIR after config import). Fixed: no per-pid suffix — matches LISP *mcp-arch-ipc-dir*
+        # which reads getenv AUTOCAD_ARCH_IPC_DIR or LOCALAPPDATA directly (no pid).
         env_val = os.environ.get("AUTOCAD_ARCH_IPC_DIR")
         if env_val is not None:
-            base = Path(env_val)
-            # Append pid suffix per spec unless already present (avoid double pid)
-            if base.name != str(os.getpid()):
-                self._ipc_dir = base / str(os.getpid())
-            else:
-                self._ipc_dir = base
+            base = Path(os.path.expandvars(env_val))
+            self._ipc_dir = base
         else:
-            # Use imported IPC_DIR (already per-pid)
-            self._ipc_dir = Path(IPC_DIR)
+            # Use imported IPC_DIR (already expanded, no pid)
+            self._ipc_dir = Path(os.path.expandvars(str(IPC_DIR)))
         # Ensure parent exists (spec: mkdir parent)
         self._ipc_dir.mkdir(parents=True, exist_ok=True)
 
@@ -121,9 +115,19 @@ class FileIPCArchBackend(AutoCADBackend):
         )
 
     async def initialize(self) -> CommandResult:
-        """Initialize backend: cleanup stale files."""
+        """Initialize backend: cleanup stale files and find AutoCAD hwnd."""
         self._cleanup_stale_files()
-        return CommandResult(ok=True, payload={"backend": self.name, "ipc_dir": str(self._ipc_dir)})
+        # Find AutoCAD window for PostMessageW (COM verify)
+        try:
+            from .com_automation import find_autocad_window
+
+            hwnd = find_autocad_window()
+            if hwnd:
+                self._hwnd = hwnd
+                self._command_hwnd = hwnd
+        except Exception:
+            pass
+        return CommandResult(ok=True, payload={"backend": self.name, "ipc_dir": str(self._ipc_dir), "hwnd": self._hwnd})
 
     async def status(self) -> CommandResult:
         info = {
