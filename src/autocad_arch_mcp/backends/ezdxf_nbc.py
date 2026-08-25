@@ -26,7 +26,7 @@ import ezdxf
 from .base import AutoCADBackend, BackendCapabilities, CommandResult
 
 
-# NBC standard layers (NCS V6/V7 + DUDBC + NBC 206:2024)
+# NBC standard layers (NCS V6/V7 + DUDBC + NBC 206:2024) — including 3-layer municipal dims
 NBC_LAYERS = [
     "A-WALL",
     "A-WALL-230",
@@ -34,8 +34,15 @@ NBC_LAYERS = [
     "A-DOOR",
     "A-WIND",
     "A-DIM",
+    "A-DIM-1",
+    "A-DIM-2",
+    "A-DIM-3",
     "A-GRID",
     "A-ANNO",
+    "A-ANNO-TEXT",
+    "A-FURN",
+    "A-STRS",
+    "A-NORTH",
     "G-TTLB",
     "V-PORT",
 ]
@@ -48,8 +55,15 @@ LAYER_COLORS = {
     "A-DOOR": 1,      # red
     "A-WIND": 5,      # blue
     "A-DIM": 2,       # yellow
+    "A-DIM-1": 2,     # yellow innermost openings
+    "A-DIM-2": 3,     # green middle room
+    "A-DIM-3": 4,     # cyan outermost overall+grid
     "A-GRID": 6,      # magenta
     "A-ANNO": 7,
+    "A-ANNO-TEXT": 7,
+    "A-FURN": 8,
+    "A-STRS": 2,
+    "A-NORTH": 7,
     "G-TTLB": 7,
     "V-PORT": 7,
 }
