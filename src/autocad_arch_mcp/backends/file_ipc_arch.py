@@ -114,6 +114,26 @@ class FileIPCArchBackend(AutoCADBackend):
             can_undo=True,
         )
 
+    def _find_command_line_hwnd(self) -> int | None:
+        """Find AutoCAD's MDIClient child window for focus-free PostMessageW."""
+        if not self._hwnd:
+            return None
+        try:
+            import win32gui
+
+            mdi = []
+
+            def cb(child_hwnd, _):
+                if win32gui.GetClassName(child_hwnd) == "MDIClient":
+                    mdi.append(child_hwnd)
+                    return False
+                return True
+
+            win32gui.EnumChildWindows(self._hwnd, cb, None)
+            return mdi[0] if mdi else None
+        except Exception:
+            return None
+
     async def initialize(self) -> CommandResult:
         """Initialize backend: cleanup stale files and find AutoCAD hwnd."""
         self._cleanup_stale_files()
@@ -124,10 +144,12 @@ class FileIPCArchBackend(AutoCADBackend):
             hwnd = find_autocad_window()
             if hwnd:
                 self._hwnd = hwnd
-                self._command_hwnd = hwnd
+                # Find MDIClient for focus-free dispatch (original file_ipc pattern)
+                cmd_hwnd = self._find_command_line_hwnd()
+                self._command_hwnd = cmd_hwnd or hwnd
         except Exception:
             pass
-        return CommandResult(ok=True, payload={"backend": self.name, "ipc_dir": str(self._ipc_dir), "hwnd": self._hwnd})
+        return CommandResult(ok=True, payload={"backend": self.name, "ipc_dir": str(self._ipc_dir), "hwnd": self._hwnd, "command_hwnd": self._command_hwnd})
 
     async def status(self) -> CommandResult:
         info = {
