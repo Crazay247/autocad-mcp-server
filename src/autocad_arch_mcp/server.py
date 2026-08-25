@@ -21,6 +21,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .backends.base import CommandResult
 from .client import _error, _json, add_screenshot_if_available, get_backend
 
+# Hama gold retrieval (every-run teaching) — optional, fallback pseudo-embed if rag not built
+try:
+    from .rag.hama_store import hama_retrieve, hama_similarity, get_gold  # type: ignore
+except Exception:
+    hama_retrieve = None  # type: ignore
+    hama_similarity = None  # type: ignore
+    get_gold = None  # type: ignore
+
 mcp = FastMCP("autocad-arch-mcp")
 
 # ── Pydantic models (strong, cited, extra ignored for compat) ────────────
@@ -355,6 +363,41 @@ async def nbc_drawing(operation: str, data: dict | None = None, include_screensh
             res = await backend.drawing_purge() if hasattr(backend, "drawing_purge") else CommandResult(ok=True, payload="purge stub")
         elif operation in ("plot_pdf", "plot", "export_pdf"):
             path = data.get("path") or data.get("file") or "output.pdf"
+            # Hama gold pre-flight 95 gate (every-run teaching) — requires title/north/viewport + sections/hatches per Hama A001
+            if operation in ("plot_pdf", "plot", "export_pdf"):
+                try:
+                    # Build Hama features from doc + data
+                    h_features: dict = {}
+                    try:
+                        if hasattr(backend, "doc") and getattr(backend, "doc", None) is not None:
+                            try:
+                                from .rag.hama_store import extract_hama_features  # type: ignore
+
+                                feats = extract_hama_features(backend.doc)
+                                h_features.update(
+                                    {
+                                        "has_title": "G-TTLB" in feats.get("layers", []),
+                                        "has_north": "A-NORTH" in feats.get("layers", []),
+                                        "has_viewport": feats.get("viewports", 0) > 0,
+                                        "has_section_line": any("A-SECT" in l for l in feats.get("layers", [])),
+                                        "has_hatch": feats.get("hatches_count", 0) > 0,
+                                    }
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                    for k in ("has_title", "has_north", "has_viewport", "has_section_line", "has_hatch", "hatch_pattern", "hatch_scale", "detail_scale", "viewport_scale", "window_area", "floor_area", "hills"):
+                        if k in data:
+                            h_features[k] = data[k]
+                    if h_features:
+                        from .nbc.validator import score_drawing_hama
+
+                        hres = score_drawing_hama(h_features)
+                        if hres.get("score", 100) < 95:
+                            return _json({"ok": False, "error": f"Hama plot gate {hres.get('score')}/100 <95 blocked: {hres.get('findings')} - fix per hama://A001 gold", "hama_gate": hres})
+                except Exception:
+                    pass
             if hasattr(backend, "drawing_plot_pdf"):
                 res = await backend.drawing_plot_pdf(path=path)
             else:
@@ -1050,6 +1093,39 @@ async def nbc_system(operation: str, data: dict | None = None, include_screensho
                 validate_path(path)
             except ValueError as e:
                 return _json({"ok": False, "error": str(e)})
+            # Hama gold pre-flight 95 gate (every-run teaching)
+            try:
+                h_features: dict = {}
+                try:
+                    if hasattr(backend, "doc") and getattr(backend, "doc", None) is not None:
+                        try:
+                            from .rag.hama_store import extract_hama_features  # type: ignore
+
+                            feats = extract_hama_features(backend.doc)
+                            h_features.update(
+                                {
+                                    "has_title": "G-TTLB" in feats.get("layers", []),
+                                    "has_north": "A-NORTH" in feats.get("layers", []),
+                                    "has_viewport": feats.get("viewports", 0) > 0,
+                                    "has_section_line": any("A-SECT" in l for l in feats.get("layers", [])),
+                                    "has_hatch": feats.get("hatches_count", 0) > 0,
+                                }
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                for k in ("has_title", "has_north", "has_viewport", "has_section_line", "has_hatch", "hatch_pattern", "hatch_scale", "detail_scale", "viewport_scale"):
+                    if k in data:
+                        h_features[k] = data[k]
+                if h_features:
+                    from .nbc.validator import score_drawing_hama
+
+                    hres = score_drawing_hama(h_features)
+                    if hres.get("score", 100) < 95:
+                        return _json({"ok": False, "error": f"Hama plot gate {hres.get('score')}/100 <95 blocked: {hres.get('findings')} - fix per hama://A001 gold", "hama_gate": hres})
+            except Exception:
+                pass
             if hasattr(backend, "drawing_plot_pdf"):
                 res = await backend.drawing_plot_pdf(path=path)
             else:
@@ -1093,6 +1169,96 @@ async def nbc_system(operation: str, data: dict | None = None, include_screensho
     d = _to_dict(res)
     d = await add_screenshot_if_available(d, include_screenshot)
     return _json(d)
+
+
+@mcp.tool(annotations={"title": "Hama Gold"})
+async def hama_gold(operation: str, data: dict | None = None, include_screenshot: bool = False) -> str:
+    """Hama gold teaching — every-run retrieval of construction perfection.
+
+    operations:
+    - retrieve: data {intent: str, k: int=3} -> top-k gold exemplars (BARAL municipal + Hama A001/A020) via cosine similarity
+    - similarity: data {features: dict, gold_id: str="hama_A001"} -> 0-100 vs Hama
+    - extract: data {} -> extract current drawing features via ezdxf (layers, dims, hatches, viewports) for scoring
+    - score: data {features: dict} -> composite Hama 0.5*validator +0.3*vision+0.2*sim
+    """
+    if data is None:
+        data = {}
+    try:
+        if operation in ("retrieve", "query", "search"):
+            intent = data.get("intent") or data.get("query") or "architectural plan"
+            k = int(data.get("k", 3))
+            if hama_retrieve is None:
+                return _json({"ok": False, "error": "hama_store not available"})
+            res = hama_retrieve(intent, k=k)
+            return _json({"ok": True, "gold": res})
+        elif operation in ("similarity", "sim", "hama_similarity"):
+            features = data.get("features") or {}
+            gold_id = data.get("gold_id", "hama_A001")
+            if hama_similarity is None:
+                return _json({"ok": False, "error": "hama_store not available"})
+            sim = hama_similarity(features, gold_id=gold_id)
+            return _json({"ok": True, "similarity": sim, "gold_id": gold_id})
+        elif operation in ("extract", "features", "extract_features"):
+            try:
+                backend = await get_backend()
+                if hasattr(backend, "doc") and getattr(backend, "doc", None) is not None:
+                    try:
+                        from .rag.hama_store import extract_hama_features  # type: ignore
+
+                        feats = extract_hama_features(backend.doc)
+                        return _json({"ok": True, "features": feats})
+                    except Exception as e:
+                        return _error(str(e))
+                else:
+                    return _json({"ok": False, "error": "no doc (use file_ipc backend with AutoCAD or ezdxf headless after drawing_create)"})
+            except Exception as e:
+                return _error(str(e))
+        elif operation in ("score", "score_hama", "composite"):
+            features = data.get("features") or {}
+            # optionally extract from doc if empty
+            if not features:
+                try:
+                    backend = await get_backend()
+                    if hasattr(backend, "doc") and getattr(backend, "doc", None) is not None:
+                        from .rag.hama_store import extract_hama_features  # type: ignore
+
+                        feats = extract_hama_features(backend.doc)
+                        features.update(
+                            {
+                                "has_title": "G-TTLB" in feats.get("layers", []),
+                                "has_north": "A-NORTH" in feats.get("layers", []),
+                                "has_viewport": feats.get("viewports", 0) > 0,
+                                "has_section_line": any("A-SECT" in l for l in feats.get("layers", [])),
+                                "has_hatch": feats.get("hatches_count", 0) > 0,
+                            }
+                        )
+                except Exception:
+                    pass
+            try:
+                from .nbc.validator import score_drawing_hama
+                from .nbc.judge import hama_composite  # type: ignore
+
+                # if doc available, use hama_composite for full 0.5/0.3/0.2
+                try:
+                    backend = await get_backend()
+                    if hasattr(backend, "doc") and getattr(backend, "doc", None) is not None:
+                        # try composite with doc
+                        try:
+                            comp = hama_composite(backend.doc, features, None)
+                            return _json({"ok": True, "hama_composite": comp})
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                # fallback to validator-only Hama score
+                res = score_drawing_hama(features)
+                return _json({"ok": True, "hama_score": res})
+            except Exception as e:
+                return _error(str(e))
+        else:
+            return _json({"ok": False, "error": f"unknown hama_gold operation {operation}"})
+    except Exception as e:
+        return _error(str(e))
 
 
 def main() -> None:

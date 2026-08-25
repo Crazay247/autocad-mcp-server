@@ -189,3 +189,38 @@ def composite_score(doc: Any, validator_features: dict, screenshot_b64: str | No
         "validator": v,
         "vision": vis,
     }
+
+
+def hama_composite(doc: Any, validator_features: dict, screenshot_b64: str | None = None, gold_id: str = "hama_A001") -> dict:
+    """Hama gold 0.5*validator_hama +0.3*vision +0.2*similarity — 95 plot gate."""
+    from .validator import score_drawing_hama
+    from .rag.hama_store import hama_similarity
+
+    v = score_drawing_hama(validator_features)
+    vis = score_drawing_heuristic(doc, screenshot_b64)
+    # Similarity 0-100 to Hama gold
+    try:
+        sim = hama_similarity(validator_features, gold_id=gold_id)
+    except Exception:
+        sim = 50.0
+    composite = int(0.5 * v["score"] + 0.3 * vis["score"] + 0.2 * sim)
+    findings = v["findings"] + vis["findings"]
+    if sim < 85:
+        findings.append(f"hama_similarity {sim:.1f} <85 vs {gold_id} (cite Hama A001 77 layers)")
+    breakdown = {
+        **{f"validator_{k}": v for k, v in v["breakdown"].items()},
+        **{f"vision_{k}": v for k, v in vis["breakdown"].items()},
+        "hama_similarity": sim,
+    }
+    compliant = composite >= 95
+    severity = "critical" if composite < 50 else "major" if composite < 85 else "minor" if composite < 95 else "ok"
+    return {
+        "score": composite,
+        "compliant": compliant,
+        "findings": findings,
+        "breakdown": breakdown,
+        "severity": severity,
+        "validator_hama": v,
+        "vision": vis,
+        "hama_similarity": sim,
+    }

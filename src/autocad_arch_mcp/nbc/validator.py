@@ -455,3 +455,95 @@ def score_drawing(features: dict) -> dict:
     compliant = total >= 85
     severity = "critical" if total < 50 else "major" if total < 85 else "minor" if total < 95 else "ok"
     return {"score": total, "compliant": compliant, "findings": all_findings, "breakdown": breakdown, "severity": severity}
+
+
+# ── Hama gold composite (95 gate for plot) ──
+
+
+def validate_section(scale: str, has_section_line: bool, has_hatch: bool) -> dict:
+    """Section at 1:20/1:50 needs cut line extra-wide 0.7 dash-dot + hatch AR-BRSTD/AR-CONC per Hama 1:5."""
+    findings: list[str] = []
+    compliant = True
+    if scale in ("1:20", "1:10", "1:5") and not has_section_line:
+        compliant = False
+        findings.append(f"section {scale} missing cut line extra-wide 0.7 dash-dot (cite Hama A020 1:5)")
+    if has_hatch is False and scale in ("1:20", "1:5"):
+        compliant = False
+        findings.append("section hatch missing AR-BRSTD/AR-CONC (cite IS962 Table7 + Hama Wall 1:5)")
+    return {"compliant": compliant, "findings": findings}
+
+
+def validate_hatch(pattern: str, scale: float, detail_scale: str = "1:100") -> dict:
+    """Hatch pattern per IS962 Table7 + Hama scale discipline AR-SAND 0.3@1:5 vs ANSI31 118@1:275."""
+    allowed = ["AR-BRSTD", "AR-CONC", "ANSI31", "ANSI32", "AR-SAND", "DOLMIT", "CLAY", "EARTH", "SOLID", "AR-B816", "GRAVEL"]
+    compliant = pattern.upper() in [a.upper() for a in allowed]
+    findings: list[str] = []
+    if not compliant:
+        findings.append(f"hatch {pattern} not in Hama/IS962 {allowed}")
+    # Scale discipline: 1:5 wall hatches 0.3-25, 1:275 plan 100+
+    if detail_scale == "1:5" and pattern.upper() in ("AR-SAND", "ANSI31", "CLAY") and not (0.2 <= scale <= 30):
+        compliant = False
+        findings.append(f"hatch {pattern} scale {scale} wrong for {detail_scale} (Hama 0.3-25)")
+    if detail_scale == "1:275" and pattern.upper() == "ANSI31" and not (80 <= scale <= 150):
+        compliant = False
+        findings.append(f"hatch ANSI31 scale {scale} wrong for 1:275 (Hama 118)")
+    return {"compliant": compliant, "findings": findings}
+
+
+def validate_title_block(has_title: bool, has_north: bool, has_viewport: bool, viewport_scale: str | None = None) -> dict:
+    """ISO7200 title block + north + viewport 1:100/1:50/1:20 per Hama 12 layouts."""
+    findings: list[str] = []
+    compliant = True
+    if not has_title:
+        compliant = False
+        findings.append("title block G-TTLB missing (cite ISO7200 + Hama SHEET A2)")
+    if not has_north:
+        compliant = False
+        findings.append("north A-NORTH missing (Hama has North Arrow layer)")
+    if not has_viewport:
+        compliant = False
+        findings.append("viewport V-PORT locked missing (Hama 2-4 per layout)")
+    if viewport_scale and viewport_scale not in ("1:100", "1:50", "1:20", "1:10", "1:5", "1:275", "1:200", "1:150"):
+        compliant = False
+        findings.append(f"viewport scale {viewport_scale} not in Hama ladder 1:275/1:200/1:150/1:100/1:50/1:20/1:10/1:5")
+    return {"compliant": compliant, "findings": findings}
+
+
+def score_drawing_hama(features: dict) -> dict:
+    """Hama gold 0-100. Extends base score_drawing with sections/hatches/title/viewport for 95 plot gate."""
+    base = score_drawing(features)
+    # Hama weights: redistribute for construction detail focus
+    # Keep base score as foundation, then add Hama-specific checks as bonus/penalty to reach 95
+    hama_findings: list[str] = list(base["findings"])
+    hama_score = base["score"]
+    breakdown = dict(base["breakdown"])
+
+    # Section discipline (if features indicates detail scale)
+    if features.get("detail_scale") in ("1:20", "1:10", "1:5", "1:100"):
+        r = validate_section(features.get("detail_scale", "1:100"), has_section_line=features.get("has_section_line", True), has_hatch=features.get("has_hatch", True))
+        if not r["compliant"]:
+            hama_findings.extend(r["findings"])
+            hama_score = max(0, hama_score - 10)
+        breakdown["hama_section"] = 10 if r["compliant"] else 0
+
+    # Hatch pattern gate
+    if features.get("hatch_pattern"):
+        r = validate_hatch(features["hatch_pattern"], float(features.get("hatch_scale", 1.0)), detail_scale=features.get("detail_scale", "1:100"))
+        if not r["compliant"]:
+            hama_findings.extend(r["findings"])
+            hama_score = max(0, hama_score - 5)
+        breakdown["hama_hatch"] = 5 if r["compliant"] else 0
+
+    # Title/viewport/north
+    if any(k in features for k in ("has_title", "has_north", "has_viewport")):
+        r = validate_title_block(bool(features.get("has_title", True)), bool(features.get("has_north", True)), bool(features.get("has_viewport", True)), viewport_scale=features.get("viewport_scale"))
+        if not r["compliant"]:
+            hama_findings.extend(r["findings"])
+            hama_score = max(0, hama_score - 5)
+        breakdown["hama_title"] = 5 if r["compliant"] else 0
+
+    # Re-cap, Hama requires 95 to plot
+    hama_score = min(100, hama_score)
+    compliant = hama_score >= 95
+    severity = "critical" if hama_score < 50 else "major" if hama_score < 85 else "minor" if hama_score < 95 else "ok"
+    return {"score": hama_score, "compliant": compliant, "findings": hama_findings, "breakdown": breakdown, "severity": severity, "base": base}
