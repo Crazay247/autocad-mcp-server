@@ -77,8 +77,8 @@ def verify_trusted_hashes(trusted_path=None) -> dict:
     candidates.extend(
         [
             Path("knowledge/trusted_hashes.json"),
+            Path(__file__).resolve().parents[2] / "knowledge" / "trusted_hashes.json",
             Path(__file__).resolve().parents[3] / "knowledge" / "trusted_hashes.json",
-            Path(__file__).resolve().parents[4] / "knowledge" / "trusted_hashes.json",
         ]
     )
     trusted_file = next((p for p in candidates if p.exists()), None)
@@ -96,7 +96,7 @@ def verify_trusted_hashes(trusted_path=None) -> dict:
     base_candidates = [
         Path("knowledge"),
         trusted_file.parent,
-        Path(__file__).resolve().parents[3] / "knowledge",
+        Path(__file__).resolve().parents[2] / "knowledge",
     ]
     for fname, expected in snapshots.items():
         if expected.startswith("PENDING"):
