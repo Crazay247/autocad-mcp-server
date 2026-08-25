@@ -16,7 +16,7 @@ IPC_DIR = Path(
         "AUTOCAD_ARCH_IPC_DIR",
         os.path.expandvars(r"%LOCALAPPDATA%\autocad-arch-mcp\ipc"),
     )
-) / str(os.getpid())
+)
 
 IPC_TIMEOUT = max(
     1.0, min(300.0, float(os.environ.get("AUTOCAD_ARCH_IPC_TIMEOUT", "10.0")))
