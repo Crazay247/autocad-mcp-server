@@ -729,7 +729,7 @@
 
 ;; --- Freehand LISP execution ---
 
-(defun mcp-cmd-execute-lisp (params / code-file result old-secureload old-trusted new-trusted sanitised)
+(defun mcp-cmd-execute-lisp (params / code-file result old-secureload old-trusted new-trusted sanitised lpval)
   (setq code-file (mcp-json-get-string params "code_file"))
   ;; sanitise before load
   (setq sanitised (mcp-sanitise-input code-file))
@@ -744,13 +744,12 @@
           (setq old-secureload (getvar "SECURELOAD"))
           (setq old-trusted (getvar "TRUSTEDPATHS"))
           (setvar "SECURELOAD" 1)
+          (setq lpval (getenv "LOCALAPPDATA"))
           (setq new-trusted
             (strcat old-trusted ";"
-              (let ((lp (getenv "LOCALAPPDATA")))
-                (if (and lp (> (strlen lp) 0))
-                  (strcat lp "\\autocad-arch-mcp\\ipc")
-                  "C:\\Users\\Predator\\AppData\\Local\\autocad-arch-mcp\\ipc"
-                )
+              (if (and lpval (> (strlen lpval) 0))
+                (strcat lpval "\\autocad-arch-mcp\\ipc")
+                "C:\\Users\\Predator\\AppData\\Local\\autocad-arch-mcp\\ipc"
               )
             )
           )
@@ -1757,6 +1756,7 @@
 (princ *mcp-arch-ipc-dir*)
 (princ "\nReady for commands via (c:mcp-arch-dispatch)  [alias c:mcp-dispatch]")
 (princ)
+
 
 
 
