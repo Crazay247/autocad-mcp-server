@@ -194,7 +194,10 @@ def composite_score(doc: Any, validator_features: dict, screenshot_b64: str | No
 def hama_composite(doc: Any, validator_features: dict, screenshot_b64: str | None = None, gold_id: str = "hama_A001") -> dict:
     """Hama gold 0.5*validator_hama +0.3*vision +0.2*similarity — 95 plot gate."""
     from .validator import score_drawing_hama
-    from .rag.hama_store import hama_similarity
+    try:
+        from ..rag.hama_store import hama_similarity  # type: ignore
+    except Exception:
+        from autocad_arch_mcp.rag.hama_store import hama_similarity  # type: ignore
 
     v = score_drawing_hama(validator_features)
     vis = score_drawing_heuristic(doc, screenshot_b64)
